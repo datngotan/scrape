@@ -1,9 +1,18 @@
 import { BAC_MAT_TRANG_SOURCES } from "./sources/silver/bac_mat_trang.js";
+import { HUONG_CHI_SILVER_SOURCES } from "./sources/silver/huong_chi.js";
 import { CHIEN_MINH_SOURCES } from "./sources/gold/chien_minh.js";
+import { HUONG_CHI_SOURCES } from "./sources/gold/huong_chi.js";
 import { KIM_TIN_SOURCES } from "./sources/gold/kim_tin.js";
 
-export const SILVER_SOURCES = [...BAC_MAT_TRANG_SOURCES];
-export const GOLD_SOURCES = [...KIM_TIN_SOURCES, ...CHIEN_MINH_SOURCES];
+export const SILVER_SOURCES = [
+  ...BAC_MAT_TRANG_SOURCES,
+  ...HUONG_CHI_SILVER_SOURCES,
+];
+export const GOLD_SOURCES = [
+  ...KIM_TIN_SOURCES,
+  ...CHIEN_MINH_SOURCES,
+  ...HUONG_CHI_SOURCES,
+];
 export const SILVER_TABLE = "silver_prices_9999";
 export const GOLD_TABLE = "gold_prices_999";
 
