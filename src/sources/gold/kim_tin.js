@@ -3,17 +3,17 @@ import { nowVnText, stripHtmlToText } from "../../utils.js";
 const KIM_TIN_PRODUCTS = [
   {
     id: "kim_tin",
-    name: "Kim Tin (Nhan tron tron 999.9)",
+    name: "Kim Tín (Nhẫn tròn trơn 999.9)",
     label: "NHAN TRON TRON",
   },
   {
     id: "kim_tin_nhan_tron_ep_vi",
-    name: "Kim Tin (Nhan tron ep vi 999.9)",
+    name: "Kim Tín (Nhẫn tròn ép vỉ 999.9)",
     label: "NHAN TRON EP VI",
   },
   {
     id: "kim_tin_qua_mung_vang",
-    name: "Kim Tin (Qua mung vang 999.9)",
+    name: "Kim Tín (Quà mừng vàng 999.9)",
     label: "QUA MUNG VANG",
   },
 ];

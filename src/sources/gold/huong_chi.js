@@ -17,7 +17,7 @@ const HUONG_CHI_PRODUCTS = [
 ];
 
 const HUONG_CHI_WEB_URL = "http://vanghuongchi.com.vn/";
-const HUONG_CHI_JINA_URL = "http://vanghuongchi.com.vn/";
+const HUONG_CHI_JINA_URL = "https://r.jina.ai/http://vanghuongchi.com.vn/";
 
 function normalizeSpaces(input) {
   return String(input || "").replace(/\s+/g, " ").trim();
