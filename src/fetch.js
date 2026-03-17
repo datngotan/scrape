@@ -1,6 +1,10 @@
 import { chromium } from "playwright";
 
-function hasExpectedPriceContent(html) {
+function hasExpectedPriceContent(html, url) {
+  if (!String(url || "").includes("bacmattrang.com")) {
+    return true;
+  }
+
   const text = String(html || "");
   return (
     text.includes("top-table-chart") &&
@@ -46,7 +50,7 @@ export async function fetchHtml(url, options = {}) {
         const html = await page.content();
         lastHtml = html;
 
-        if (hasExpectedPriceContent(html) || attempt === maxAttempts) {
+        if (hasExpectedPriceContent(html, url) || attempt === maxAttempts) {
           return html;
         }
       } finally {

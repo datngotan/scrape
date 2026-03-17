@@ -17,6 +17,15 @@ export function parseSilverPriceToThousand(raw) {
   return n >= 1_000_000 ? Math.round(n / 1000) : n;
 }
 
+export function toNumberDigits(raw) {
+  const cleaned = String(raw || "").replace(/[^\d]/g, "");
+  if (!cleaned) return null;
+
+  const value = Number(cleaned);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
 function normalizeNeedleText(input) {
   return String(input || "")
     .toLowerCase()

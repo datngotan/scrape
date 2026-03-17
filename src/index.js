@@ -1,8 +1,39 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { SOURCES } from "./config.js";
+import { GOLD_TABLE, SOURCES, tableForSourceId } from "./config.js";
 import { fetchHtml } from "./fetch.js";
 import { buildRowOrNull } from "./row.js";
+
+const TABLE_ROW_TRANSFORMERS = new Map([
+  [GOLD_TABLE, (row) => {
+    const { unit, ...rest } = row;
+    return rest;
+  }],
+]);
+
+function transformRowForTable(tableName, row) {
+  const transformer = TABLE_ROW_TRANSFORMERS.get(tableName);
+  return transformer ? transformer(row) : row;
+}
+
+function groupSucceededRowsByTable(succeeded) {
+  const tableToRows = new Map();
+
+  for (const item of succeeded) {
+    const tableName = tableForSourceId(item.id);
+    const bucket = tableToRows.get(tableName) ?? [];
+    bucket.push(transformRowForTable(tableName, item.row));
+    tableToRows.set(tableName, bucket);
+  }
+
+  return tableToRows;
+}
+
+function buildUpsertedIdsForTable(succeeded, tableName) {
+  return succeeded
+    .filter((item) => tableForSourceId(item.id) === tableName)
+    .map((item) => `${item.id}:${item.row.unit}`);
+}
 
 function normalizeUrlForCache(rawUrl) {
   const trimmed = String(rawUrl || "").trim();
@@ -126,7 +157,7 @@ export async function runScrapeJob(options = {}) {
       httpStatus: 200,
       summary: {
         ok: true,
-        message: "No silver sources configured",
+        message: "No sources configured",
         upserted: [],
       },
     };
@@ -139,7 +170,7 @@ export async function runScrapeJob(options = {}) {
     const cached = payloadCache.get(key);
     if (cached) return cached;
 
-    const requestPromise = fetchHtml(requestUrl);
+    const requestPromise = fetchHtml(requestUrl, source.fetchOptions ?? {});
 
     payloadCache.set(key, requestPromise);
     return requestPromise;
@@ -185,6 +216,7 @@ export async function runScrapeJob(options = {}) {
 
   if (succeeded.length > 0 && persist) {
     const rows = succeeded.map((s) => s.row);
+    const tableToRows = groupSucceededRowsByTable(succeeded);
 
     const missingSourceUrlIds = rows
       .filter((row) => !row.source_url || !row.source_url.trim())
@@ -216,13 +248,21 @@ export async function runScrapeJob(options = {}) {
       console.error("=== DB CONFIG ERROR ===", dbError);
     } else {
       const supabase = createClient(supabaseUrl, serviceRole);
-      const table = "silver_prices_9999";
-      const { error } = await supabase.from(table).upsert(rows);
-      if (error) {
-        dbError = error.message;
-        console.error("=== DB UPSERT ERROR ===", dbError);
-      } else {
-        upsertedIds.push(...succeeded.map((s) => `${s.id}:${s.row.unit}`));
+      const dbErrors = [];
+
+      for (const [table, tableRows] of tableToRows.entries()) {
+        const { error } = await supabase.from(table).upsert(tableRows);
+        if (error) {
+          dbErrors.push(`${table}: ${error.message}`);
+          console.error("=== DB UPSERT ERROR ===", table, error.message);
+          continue;
+        }
+
+        upsertedIds.push(...buildUpsertedIdsForTable(succeeded, table));
+      }
+
+      if (dbErrors.length > 0) {
+        dbError = dbErrors.join(" | ");
       }
     }
   }

@@ -1,7 +1,7 @@
 import {
   parseSilverBuySellByNeedle,
   parseSilverLastUpdateText,
-} from "../utils.js";
+} from "../../utils.js";
 
 function parseTime(html) {
   return parseSilverLastUpdateText(html);
