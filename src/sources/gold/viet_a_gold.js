@@ -24,6 +24,13 @@ function normalizeText(input) {
     .replace(/\s+/g, " ");
 }
 
+function stripDiacriticsKeepPunctuation(input) {
+  return String(input || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[Đđ]/g, "d");
+}
+
 function parsePriceToken(raw) {
   const digits = String(raw || "").replace(/[^\d]/g, "");
   if (!digits) return null;
@@ -32,36 +39,37 @@ function parsePriceToken(raw) {
 }
 
 function parseBuySellByLabel(payload, label) {
-  const text = stripHtmlToText(payload);
   const normalizedLabel = normalizeText(label);
+  const raw = String(payload || "");
 
-  // Preferred path when r.jina.ai keeps markdown-like lines.
-  const lines = String(payload || "").split(/\r?\n/);
+  // Parse per raw line so numeric separators (.,) are preserved.
+  const lines = raw.split(/\r?\n/);
   for (const line of lines) {
-    if (!line.includes("|")) continue;
     if (!normalizeText(line).includes(normalizedLabel)) continue;
 
-    const nums = (line.match(/\d{1,3}(?:[.,]\d{3})+/g) ?? []).map(parsePriceToken);
+    const nums = (line.match(/\d{1,3}(?:[.,]\d{3})+|\d{4,6}/g) ?? []).map(
+      parsePriceToken,
+    );
     const filtered = nums.filter((x) => x != null);
     if (filtered.length >= 2) {
       return {
-        buy: filtered[0],
-        sell: filtered[1],
+        buy: filtered[0] / 10,
+        sell: filtered[1] / 10,
       };
     }
   }
 
-  // Fallback for flattened table text where columns are not pipe-separated.
-  const normalized = normalizeText(text);
-  const idx = normalized.indexOf(normalizedLabel);
-  if (idx >= 0) {
-    const slice = normalized.slice(idx, Math.min(normalized.length, idx + 220));
-    const nums = (slice.match(/\d{1,3}(?:[.,]\d{3})+/g) ?? []).map(parsePriceToken);
+  // Fallback for flattened output.
+  const text = stripHtmlToText(payload);
+  if (normalizeText(text).includes(normalizedLabel)) {
+    const nums = (text.match(/\d{1,3}(?:[.,]\d{3})+|\d{4,6}/g) ?? []).map(
+      parsePriceToken,
+    );
     const filtered = nums.filter((x) => x != null);
     if (filtered.length >= 2) {
       return {
-        buy: filtered[0],
-        sell: filtered[1],
+        buy: filtered[0] / 10,
+        sell: filtered[1]/ 10,
       };
     }
   }
@@ -71,9 +79,10 @@ function parseBuySellByLabel(payload, label) {
 
 function parseTime(payload) {
   const text = stripHtmlToText(payload);
+  const plain = stripDiacriticsKeepPunctuation(text);
 
-  const d = text.match(/Ngay\s*:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
-  const t = text.match(/Gio\s*:\s*(\d{1,2}):(\d{2})\s*([A-Za-z\u00C0-\u1EF9]+)?/i);
+  const d = plain.match(/Ngay\s*:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+  const t = plain.match(/Gio\s*:\s*(\d{1,2}):(\d{2})\s*([A-Za-z]+)?/i);
 
   if (d && t) {
     const dd = d[1].padStart(2, "0");
@@ -98,7 +107,7 @@ export const VIET_A_GOLD_SOURCES = VIET_A_GOLD_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
   storeName: "VIETAGOLD",
-  unit: "luong",
+  unit: "chi",
   url: "https://r.jina.ai/https://vietagold.com.vn/gia-vang/",
   webUrl: "https://vietagold.com.vn/gia-vang/",
   location: "Hà Nội",

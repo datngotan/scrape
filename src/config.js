@@ -10,6 +10,7 @@ import { LAM_NGOC_THANH_SOURCES } from "./sources/gold/lam_ngoc_thanh.js";
 import { KIM_TIN_SOURCES } from "./sources/gold/kim_tin.js";
 import { NGOC_MAI_SOURCES } from "./sources/gold/ngoc_mai.js";
 import { PHU_TAI_SOURCES } from "./sources/gold/phu_tai.js";
+import { PHUONG_NAM_GOLD_SOURCES } from "./sources/gold/phuong_nam_gold.js";
 import { VIET_A_GOLD_SOURCES } from "./sources/gold/viet_a_gold.js";
 
 export const SILVER_SOURCES = [
@@ -28,6 +29,7 @@ export const GOLD_SOURCES = [
   ...MAO_THIET_SOURCES,
   ...LAM_NGOC_THANH_SOURCES,
   ...VIET_A_GOLD_SOURCES,
+  ...PHUONG_NAM_GOLD_SOURCES,
 ];
 export const SILVER_TABLE = "silver_prices_9999";
 export const GOLD_TABLE = "gold_prices_999";
