@@ -117,7 +117,7 @@ export const KIM_HANH_SOURCES = KIM_HANH_PRODUCTS.map((product) => ({
   storeName: "Vàng Kim Hạnh",
   url: "https://r.jina.ai/https://vangkimhanh.com/",
   webUrl: "https://vangkimhanh.com/",
-  location: "TP. Hồ Chí Minh",
+  location: "TP.HCM",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);
     return {
