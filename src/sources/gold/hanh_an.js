@@ -1,15 +1,20 @@
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
-const HUONG_SON_PRODUCTS = [
+const HANH_AN_PRODUCTS = [
   {
-    id: "huong_son_vang_999_lan_7",
-    name: "Hương Sơn (Vàng 99.9)",
-    label: "Vàng 99.9",
+    id: "hanh_an_nhan_9999",
+    name: "Hạnh An (Nhẫn 9999)",
+    label: "Nhẫn 9999 Hạnh An",
   },
   {
-    id: "huong_son_vang_950",
-    name: "Hương Sơn (Vàng 950)",
-    label: "Vàng 950 Hương Sơn",
+    id: "hanh_an_trang_suc_9999",
+    name: "Hạnh An (Trang sức 99.99)",
+    label: "Trang sức 99.99",
+  },
+  {
+    id: "hanh_an_trang_suc_995",
+    name: "Hạnh An (Trang Sức 995)",
+    label: "Trang Sức 995",
   },
 ];
 
@@ -24,16 +29,6 @@ function normalizeText(input) {
     .replace(/\s+/g, " ");
 }
 
-function buildLabelPrefix(label) {
-  const normalized = normalizeText(label)
-    .replace(/\blan\s+\d+\b/g, " ")
-    .replace(/\bhuong\s+son\b/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-
-  return normalized;
-}
-
 function parsePriceToken(raw) {
   const digits = String(raw || "").replace(/[^\d]/g, "");
   if (!digits) return null;
@@ -41,7 +36,7 @@ function parsePriceToken(raw) {
   let n = Number(digits);
   if (!Number.isFinite(n) || n <= 0) return null;
 
-  // Prices are presented in full VND (e.g. 16650000); store as thousands.
+  // Keep stored unit as thousands when page outputs full VND.
   if (n >= 1_000_000) n = Math.round(n / 1000);
   return n;
 }
@@ -49,21 +44,13 @@ function parsePriceToken(raw) {
 function parseBuySellByLabel(payload, label) {
   const text = stripHtmlToText(payload);
   const normalizedLabel = normalizeText(label);
-  const labelPrefix = buildLabelPrefix(label) || normalizedLabel;
 
   const lines = text.split(/\r?\n/);
   for (const line of lines) {
     if (!line.includes("|")) continue;
 
     const cells = line.split("|").map((cell) => cell.trim());
-    const nameCell = cells.find((cell) => {
-      const normalizedCell = normalizeText(cell);
-      return (
-        normalizedCell === normalizedLabel ||
-        normalizedCell === labelPrefix ||
-        normalizedCell.startsWith(`${labelPrefix} `)
-      );
-    });
+    const nameCell = cells.find((cell) => normalizeText(cell) === normalizedLabel);
     if (!nameCell) continue;
 
     const idx = cells.indexOf(nameCell);
@@ -72,8 +59,7 @@ function parseBuySellByLabel(payload, label) {
     if (buy != null && sell != null) return { buy, sell };
   }
 
-  // Fallback for flattened content.
-  const escapedLabel = labelPrefix
+  const escapedLabel = normalizedLabel
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace(/ /g, "\\s*");
   const token = "(\\d[\\d.,]*)";
@@ -100,13 +86,13 @@ function parseTime(payload) {
   return nowVnText();
 }
 
-export const HUONG_SON_SOURCES = HUONG_SON_PRODUCTS.map((product) => ({
+export const HANH_AN_SOURCES = HANH_AN_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
-  storeName: "Tiệm Vàng Hương Sơn",
-  url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-huong-son-hom-nay/",
-  webUrl: "https://giavangmaothiet.com/gia-vang-huong-son-hom-nay/",
-  location: "Ninh Bình",
+  storeName: "Tiệm Vàng Hạnh An",
+  url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-hanh-an-hai-phong-hom-nay/",
+  webUrl: "https://giavangmaothiet.com/gia-vang-hanh-an-hai-phong-hom-nay/",
+  location: "Hải Phòng",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);
     return {

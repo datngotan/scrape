@@ -12,6 +12,8 @@ import { NGOC_MAI_SOURCES } from "./sources/gold/ngoc_mai.js";
 import { PHU_TAI_SOURCES } from "./sources/gold/phu_tai.js";
 import { PHUONG_NAM_GOLD_SOURCES } from "./sources/gold/phuong_nam_gold.js";
 import { VIET_A_GOLD_SOURCES } from "./sources/gold/viet_a_gold.js";
+import { DA_PHUC_SOURCES } from "./sources/gold/da_phuc.js";
+import { HANH_AN_SOURCES } from "./sources/gold/hanh_an.js";
 
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
@@ -30,6 +32,8 @@ export const GOLD_SOURCES = [
   ...LAM_NGOC_THANH_SOURCES,
   ...VIET_A_GOLD_SOURCES,
   ...PHUONG_NAM_GOLD_SOURCES,
+  ...DA_PHUC_SOURCES,
+  ...HANH_AN_SOURCES,
 ];
 export const SILVER_TABLE = "silver_prices_9999";
 export const GOLD_TABLE = "gold_prices_999";
