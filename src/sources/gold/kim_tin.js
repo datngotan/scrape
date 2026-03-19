@@ -35,9 +35,67 @@ function numbersFromText(text) {
     .filter((value) => Number.isFinite(value) && value > 0);
 }
 
-function parseBuySellByLabel(payload, label) {
+function parsePriceCell(cellText) {
+  const match = String(cellText || "").match(/\b(\d{4,6})\b/);
+  if (!match) return null;
+
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function parseBuySellFromMarkdownLine(line) {
+  const cells = String(line || "")
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+
+  if (cells.length < 4) return { buy: null, sell: null };
+
+  const buy = parsePriceCell(cells[cells.length - 2]);
+  const sell = parsePriceCell(cells[cells.length - 1]);
+  if (buy == null || sell == null) return { buy: null, sell: null };
+
+  return { buy, sell };
+}
+
+function parseBuySellFromMarkdown(payload, label) {
   const targetLabel = normalizeLabelText(label);
+  const lines = String(payload || "").split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.includes("|")) continue;
+
+    const normalized = normalizeLabelText(line);
+    if (!normalized.includes(targetLabel)) continue;
+
+    const direct = parseBuySellFromMarkdownLine(line);
+    if (direct.buy != null && direct.sell != null) {
+      return direct;
+    }
+
+    // Handle cases where r.jina.ai wraps one logical table row across lines.
+    const combined = [line, lines[i + 1] ?? "", lines[i + 2] ?? ""]
+      .filter((part) => part.includes("|"))
+      .join(" ");
+    const merged = parseBuySellFromMarkdownLine(combined);
+    if (merged.buy != null && merged.sell != null) {
+      return merged;
+    }
+  }
+
+  return { buy: null, sell: null };
+}
+
+function parseBuySellByLabel(payload, label) {
   const html = String(payload || "");
+
+  const markdown = parseBuySellFromMarkdown(html, label);
+  if (markdown.buy != null && markdown.sell != null) {
+    return markdown;
+  }
+
+  const targetLabel = normalizeLabelText(label);
   const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
 
   for (const row of rows) {
@@ -88,46 +146,63 @@ function parseBuySellByLabel(payload, label) {
   return { buy: null, sell: null };
 }
 
+function timeCandidatesFromRegex(text) {
+  const candidates = [];
+
+  const patterns = [
+    /(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})[\s\S]{0,100}?(\d{2})\/(\d{2})\/(\d{4})/gi,
+    /(\d{2})\/(\d{2})\/(\d{4})[\s\S]{0,100}?(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})/gi,
+    /Thu\s*\d\s*,\s*(\d{2})\/(\d{2})\/(\d{4})[\s\S]{0,60}?(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})/gi,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      let dd;
+      let mm;
+      let yyyy;
+      let HH;
+      let MI;
+      let SS;
+
+      if (pattern === patterns[1] || pattern === patterns[2]) {
+        dd = match[1];
+        mm = match[2];
+        yyyy = match[3];
+        HH = match[4];
+        MI = match[5];
+        SS = match[6];
+      } else {
+        HH = match[1];
+        MI = match[2];
+        SS = match[3];
+        dd = match[4];
+        mm = match[5];
+        yyyy = match[6];
+      }
+
+      const key = `${yyyy}${mm}${dd}${HH.padStart(2, "0")}${MI}${SS}`;
+      candidates.push({
+        key,
+        text: `${HH.padStart(2, "0")}:${MI}:${SS} ${dd}/${mm}/${yyyy}`,
+      });
+    }
+  }
+
+  return candidates;
+}
+
 function parseTime(payload) {
+  const html = String(payload || "");
   const text = stripHtmlToText(payload);
+  const candidates = [
+    ...timeCandidatesFromRegex(html),
+    ...timeCandidatesFromRegex(text),
+  ];
 
-  let m = text.match(
-    /(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})[\s\S]{0,100}?(\d{2})\/(\d{2})\/(\d{4})/i,
-  );
-  if (m) {
-    const HH = m[1].padStart(2, "0");
-    const MI = m[2];
-    const SS = m[3];
-    const dd = m[4];
-    const mm = m[5];
-    const yyyy = m[6];
-    return `${HH}:${MI}:${SS} ${dd}/${mm}/${yyyy}`;
-  }
-
-  m = text.match(
-    /(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})\s*(?:Thu\s*\d,\s*)?(\d{2})\/(\d{2})\/(\d{4})/i,
-  );
-  if (m) {
-    const HH = m[1].padStart(2, "0");
-    const MI = m[2];
-    const SS = m[3];
-    const dd = m[4];
-    const mm = m[5];
-    const yyyy = m[6];
-    return `${HH}:${MI}:${SS} ${dd}/${mm}/${yyyy}`;
-  }
-
-  m = text.match(
-    /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})/i,
-  );
-  if (m) {
-    const dd = m[1];
-    const mm = m[2];
-    const yyyy = m[3];
-    const HH = m[4].padStart(2, "0");
-    const MI = m[5];
-    const SS = m[6];
-    return `${HH}:${MI}:${SS} ${dd}/${mm}/${yyyy}`;
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => (a.key > b.key ? -1 : a.key < b.key ? 1 : 0));
+    return candidates[0].text;
   }
 
   return nowVnText();
@@ -138,8 +213,8 @@ export const KIM_TIN_SOURCES = KIM_TIN_PRODUCTS.map((product) => ({
   name: product.name,
   storeName: "Kim Tin",
   unit: "luong",
-  url: "https://r.jina.ai/https://kimtin.com.vn/bieu-do-gia-vang",
-  webUrl: "https://kimtin.com.vn/bieu-do-gia-vang",
+  url: "https://r.jina.ai/https://kimtin.com.vn",
+  webUrl: "https://kimtin.com.vn",
   location: "Hà Nội, Cao Bằng, Thái Nguyên",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);
