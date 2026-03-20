@@ -133,7 +133,7 @@ export const DA_PHUC_SOURCES = DA_PHUC_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
   storeName: "Vàng Bạc Đa Phúc",
-  location: "Sơn Tây, Hà Nội",
+  location: "Hà Nội",
   unit: "chi",
   url: "http://vangdaphuc.vn/",
   webUrl: "https://vangdaphuc.vn/",
