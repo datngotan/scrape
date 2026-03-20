@@ -5,10 +5,13 @@ import { fetchHtml } from "./fetch.js";
 import { buildRowOrNull } from "./row.js";
 
 const TABLE_ROW_TRANSFORMERS = new Map([
-  [GOLD_TABLE, (row) => {
-    const { unit, ...rest } = row;
-    return rest;
-  }],
+  [
+    GOLD_TABLE,
+    (row) => {
+      const { unit, ...rest } = row;
+      return rest;
+    },
+  ],
 ]);
 
 function transformRowForTable(tableName, row) {
@@ -203,7 +206,12 @@ export async function runScrapeJob(options = {}) {
   }
 
   if (succeeded.length > 0) {
-    console.log(`=== OK: ${succeeded.map((s) => s.id).join(", ")}`);
+    console.log(`=== OK (${succeeded.length}) ===`);
+    for (const item of succeeded) {
+      console.log(
+        `[${item.id}] buy=${item.row.buy_price} sell=${item.row.sell_price} unit=${item.row.unit} updated="${item.row.last_update_at}"`,
+      );
+    }
   }
 
   let dbError = null;
@@ -239,8 +247,7 @@ export async function runScrapeJob(options = {}) {
     }
 
     const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceRole =
-      process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRole) {
       dbError =
