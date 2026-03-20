@@ -1,5 +1,6 @@
 import { BAC_MAT_TRANG_SOURCES } from "./sources/silver/bac_mat_trang.js";
 import { HUONG_CHI_SILVER_SOURCES } from "./sources/silver/huong_chi.js";
+import { CHAT_VE_SILVER_SOURCES } from "./sources/silver/chat_ve.js";
 import { CHIEN_MINH_SOURCES } from "./sources/gold/chien_minh.js";
 import { HUONG_CHI_SOURCES } from "./sources/gold/huong_chi.js";
 import { HUONG_SON_SOURCES } from "./sources/gold/huong_son.js";
@@ -14,10 +15,13 @@ import { PHUONG_NAM_GOLD_SOURCES } from "./sources/gold/phuong_nam_gold.js";
 import { VIET_A_GOLD_SOURCES } from "./sources/gold/viet_a_gold.js";
 import { DA_PHUC_SOURCES } from "./sources/gold/da_phuc.js";
 import { HANH_AN_SOURCES } from "./sources/gold/hanh_an.js";
+import { DAI_NGHIA_SOURCES } from "./sources/gold/dainghia.js";
+import { CHAT_VE_GOLD_SOURCES } from "./sources/gold/chat_ve.js";
 
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
   ...HUONG_CHI_SILVER_SOURCES,
+  // ...CHAT_VE_SILVER_SOURCES,
 ];
 export const GOLD_SOURCES = [
   ...KIM_TIN_SOURCES,
@@ -34,6 +38,8 @@ export const GOLD_SOURCES = [
   ...PHUONG_NAM_GOLD_SOURCES,
   ...DA_PHUC_SOURCES,
   ...HANH_AN_SOURCES,
+  ...DAI_NGHIA_SOURCES,
+  // ...CHAT_VE_GOLD_SOURCES,
 ];
 export const SILVER_TABLE = "silver_prices_9999";
 export const GOLD_TABLE = "gold_prices_999";

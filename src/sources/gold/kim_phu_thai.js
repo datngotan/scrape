@@ -32,20 +32,80 @@ function escapeLabelForRegex(label) {
   return label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
 }
 
+function normalizeText(input) {
+  return String(input || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeAscii(input) {
+  return String(input || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function parsePriceToken(raw) {
-  const digits = String(raw || "").replace(/[^\d]/g, "");
+  const s = String(raw || "").trim();
+  const digits = s.replace(/[^\d]/g, "");
   if (!digits) return null;
-  const n = Number(digits);
+
+  let n = Number(digits);
+  // Site occasionally emits malformed 4-decimal token like "16.4900".
+  if (/^\d{2}\.\d{4}$/.test(s) && n >= 100_000 && n <= 300_000 && n % 10 === 0) {
+    n = Math.round(n / 10);
+  }
+
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function parseBuySellByLabel(payload, label) {
-  const text = stripHtmlToText(payload);
+  const raw = String(payload || "");
+  const text = stripHtmlToText(raw);
+  const target = normalizeText(label);
   const escaped = escapeLabelForRegex(label);
   const token = "(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,6})";
 
+  const lines = raw.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.includes("|")) continue;
+
+    const cells = line
+      .split("|")
+      .map((cell) => cell.replace(/\*\*/g, "").trim())
+      .filter(Boolean);
+    if (cells.length < 3) continue;
+
+    const rowLabel = normalizeText(cells[0]);
+    if (rowLabel !== target) continue;
+
+    const buy = parsePriceToken(cells[cells.length - 2]);
+    const sell = parsePriceToken(cells[cells.length - 1]);
+    if (buy != null && sell != null) return { buy, sell };
+
+    const combined = [line, lines[i + 1] ?? "", lines[i + 2] ?? ""]
+      .filter((part) => part.includes("|"))
+      .join(" ");
+    const joinedCells = combined
+      .split("|")
+      .map((cell) => cell.replace(/\*\*/g, "").trim())
+      .filter(Boolean);
+    if (joinedCells.length >= 3 && normalizeText(joinedCells[0]) === target) {
+      const mergedBuy = parsePriceToken(joinedCells[joinedCells.length - 2]);
+      const mergedSell = parsePriceToken(joinedCells[joinedCells.length - 1]);
+      if (mergedBuy != null && mergedSell != null) {
+        return { buy: mergedBuy, sell: mergedSell };
+      }
+    }
+  }
+
   // Markdown pipe table: | Nhẫn tròn trơn Kim Phú Thái | 17.080 | 17.380 |
-  let m = text.match(
+  let m = raw.match(
     new RegExp(
       `\\|\\s*${escaped}\\s*\\|\\s*${token}\\s*\\|\\s*${token}\\s*\\|`,
       "i",
@@ -67,10 +127,10 @@ function parseBuySellByLabel(payload, label) {
 }
 
 function parseTime(payload) {
-  const text = stripHtmlToText(payload);
+  const text = normalizeAscii(stripHtmlToText(payload));
 
   // "Cập nhật lúc : 18:00H" and "18/03/2026" (may appear on separate lines)
-  const timeMatch = text.match(/C[aă]p\s*nh[aâ]t\s*l[uú]c\s*:?\s*(\d{1,2}):(\d{2})/i);
+  const timeMatch = text.match(/Cap\s*nhat\s*luc\s*:?\s*(\d{1,2}):(\d{2})/i);
   const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
 
   if (timeMatch && dateMatch) {
