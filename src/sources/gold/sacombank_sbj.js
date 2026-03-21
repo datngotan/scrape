@@ -6,12 +6,6 @@ import { nowVnText } from "../../utils.js";
 
 const SACOMBANK_SBJ_PRODUCTS = [
   {
-    id: "sacombank_sbj_sjc_9999_1_luong",
-    name: "Sacombank-SBJ (Vàng miếng SJC 999.9 loại 1 lượng)",
-    rowNo: 1,
-    keywords: ["sjc", "999 9", "1 luong"],
-  },
-  {
     id: "sacombank_sbj_my_nghe_24k_ep_vi",
     name: "Sacombank-SBJ (Vàng mỹ nghệ SBJ 24K ép vỉ)",
     rowNo: 2,
@@ -101,7 +95,8 @@ function pickLatestBoardImage(payload) {
     if (!/(cn_|ch_)/.test(normalized)) return;
 
     const full = src.replace(/_medium(?=\.[a-z]+$)/i, "");
-    const score = normalized.includes("/cn_") ? 2 : 1;
+    // Prefer CH board (head store) over CN board.
+    const score = normalized.includes("/ch_") ? 2 : 1;
     const alt = $(el).attr("alt") || "";
     const dateKey = dateKeyFromText(alt) ?? "00000000";
     candidates.push({ url: full, score, alt, dateKey });
@@ -133,6 +128,25 @@ function parseLastUpdateText(payload, ocrText, imageMeta) {
   }
 
   return `00:00:00 ${dd}/${mm}/${yyyy}`;
+}
+
+function extractOrderedRowsFromText(text) {
+  const nums = (String(text || "").match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [])
+    .map((raw) => parsePriceToThousand(raw))
+    .filter((n) => n != null);
+
+  const rowsByNumber = new Map();
+  let rowNo = 1;
+  for (let i = 0; i + 1 < nums.length && rowNo <= 10; i += 2, rowNo += 1) {
+    rowsByNumber.set(rowNo, {
+      rowNo,
+      text: "",
+      buy: nums[i],
+      sell: nums[i + 1],
+    });
+  }
+
+  return rowsByNumber;
 }
 
 async function ocrBoard(payload) {
@@ -191,6 +205,15 @@ async function ocrBoard(payload) {
 
       rowsByNumber.set(rowNo, row);
       rows.push(row);
+    }
+
+    // Fallback: OCR can split product and prices into separate lines.
+    // In that case, take ordered price pairs (row 1..10) from a second OCR pass.
+    await worker.setParameters({ tessedit_pageseg_mode: "12" });
+    const { data: dataPsm12 } = await worker.recognize(preprocessed);
+    const orderedRows = extractOrderedRowsFromText(String(dataPsm12.text || ""));
+    for (const [rowNo, row] of orderedRows.entries()) {
+      if (!rowsByNumber.has(rowNo)) rowsByNumber.set(rowNo, row);
     }
 
     return {

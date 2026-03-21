@@ -7,14 +7,16 @@ import { nowVnText, parseSilverPriceToThousand } from "../../utils.js";
 const SACOMBANK_SBJ_SILVER_PRODUCTS = [
   {
     id: "sacombank_sbj_bac_thoi_999_1_luong",
-    name: "Sacombank-SBJ (Bạc thỏi SBJ 999 - 1 lượng)",
+    name: "Sacombank-SBJ (Bạc kim phúc lộc)",
+    type: "luong",
     unit: "luong",
   },
   {
     id: "sacombank_sbj_bac_thoi_999_1_kg",
-    name: "Sacombank-SBJ (Bạc thỏi SBJ 999 - 1kg)",
+    name: "Sacombank-SBJ (Bạc kim phúc lộc)",
+    type: "kg",
     unit: "kg",
-  },
+  }
 ];
 
 let lastPayloadKey = "";
@@ -99,12 +101,25 @@ function extractTwoPrices(line) {
   return { buy: nums[nums.length - 2], sell: nums[nums.length - 1] };
 }
 
+function normalizeText(input) {
+  return String(input || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function parseRowsFromOcrText(text) {
   const rows = {
     luong: { buy: null, sell: null },
     kg: { buy: null, sell: null },
+    myNghe: { buy: null, sell: null },
   };
   const pricedLines = [];
+  let myNgheSinglePrice = null;
 
   const lines = String(text || "")
     .split(/\r?\n/)
@@ -113,6 +128,22 @@ function parseRowsFromOcrText(text) {
 
   for (const line of lines) {
     const lower = line.toLowerCase();
+    const normalizedLine = normalizeText(line);
+
+    if (
+      rows.myNghe.buy == null &&
+      (normalizedLine.includes("my nghe") || normalizedLine.includes("limited"))
+    ) {
+      const nums = (line.match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [])
+        .map((raw) => parseSilverPriceToThousand(raw))
+        .filter((n) => n != null);
+      if (nums.length >= 2) {
+        rows.myNghe = { buy: nums[nums.length - 2], sell: nums[nums.length - 1] };
+      } else if (nums.length === 1) {
+        myNgheSinglePrice = nums[0];
+      }
+    }
+
     const prices = extractTwoPrices(line);
     if (prices.buy == null || prices.sell == null) continue;
     pricedLines.push(prices);
@@ -135,6 +166,22 @@ function parseRowsFromOcrText(text) {
     rows.kg = pricedLines[1];
   }
 
+  // Some boards display a single quoted value for Bac my nghe.
+  // Derive a usable pair by combining that value with luong sell if available.
+  if (rows.myNghe.buy == null && myNgheSinglePrice != null) {
+    rows.myNghe = {
+      buy: myNgheSinglePrice,
+      sell: rows.luong.sell ?? myNgheSinglePrice,
+    };
+  }
+
+  if (rows.myNghe.buy == null && rows.luong.buy != null && rows.luong.sell != null) {
+    rows.myNghe = {
+      buy: rows.luong.buy,
+      sell: rows.luong.sell,
+    };
+  }
+
   return rows;
 }
 
@@ -145,6 +192,7 @@ async function ocrSilverBoard(payload) {
       rows: {
         luong: { buy: null, sell: null },
         kg: { buy: null, sell: null },
+        myNghe: { buy: null, sell: null },
       },
       lastUpdateText: nowVnText(),
     };
@@ -194,7 +242,12 @@ export const SACOMBANK_SBJ_SILVER_SOURCES = SACOMBANK_SBJ_SILVER_PRODUCTS.map(
     unit: product.unit,
     parse: async (payload) => {
       const board = await getSilverBoardPromise(payload);
-      const row = product.unit === "kg" ? board.rows.kg : board.rows.luong;
+      const row =
+        product.type === "kg"
+          ? board.rows.kg
+          : product.type === "my_nghe"
+            ? board.rows.myNghe
+            : board.rows.luong;
       return {
         buy: row.buy,
         sell: row.sell,
