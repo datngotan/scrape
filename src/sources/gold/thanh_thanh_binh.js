@@ -48,29 +48,48 @@ function parsePriceToken(raw) {
 }
 
 function parseBuySellByLabel(payload, label) {
+  const html = String(payload || "");
   const text = stripHtmlToText(payload);
   const normalizedLabel = normalizeText(label);
 
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
+  const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+  for (const row of rows) {
+    const cells = [...row.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(
+      (m) => stripHtmlToText(m[1]),
+    );
+    if (cells.length < 3) continue;
+
+    const rowName = normalizeText(cells[0]);
+    if (!rowName.includes(normalizedLabel)) continue;
+
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
+    if (buy != null && sell != null) return { buy, sell };
+  }
+
+  const markdownLines = String(payload || "").split(/\r?\n/);
+  for (const line of markdownLines) {
     if (!line.includes("|")) continue;
 
-    const cells = line.split("|").map((cell) => cell.trim());
-    const nameCell = cells.find((cell) => normalizeText(cell) === normalizedLabel);
-    if (!nameCell) continue;
+    const cells = line
+      .split("|")
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+    if (cells.length < 3) continue;
 
-    const idx = cells.indexOf(nameCell);
-    const buy = parsePriceToken(cells[idx + 1] ?? "");
-    const sell = parsePriceToken(cells[idx + 2] ?? "");
+    if (!normalizeText(cells[0]).includes(normalizedLabel)) continue;
+
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
     if (buy != null && sell != null) return { buy, sell };
   }
 
   const escapedLabel = normalizedLabel
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/ /g, "\\s*");
-  const token = "(\\d[\\d.,]*)";
-  const m = normalizeText(text).match(
-    new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
+    .replace(/ /g, "\\s+");
+  const token = "(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,8})";
+  const m = String(payload || "").match(
+    new RegExp(`${escapedLabel}[\\s\\S]{0,120}?${token}[\\s\\S]{0,40}?${token}`, "i"),
   );
 
   if (m) {
@@ -96,7 +115,7 @@ export const THANH_THANH_BINH_SOURCES = THANH_THANH_BINH_PRODUCTS.map((product) 
   id: product.id,
   name: product.name,
   storeName: "Tiệm Vàng Thanh Thanh Bình",
-  url: "https://r.jina.ai/https://giavangmaothiet.com/tiem-vang-thanh-thanh-binh/",
+  url: "https://giavangmaothiet.com/tiem-vang-thanh-thanh-binh/",
   webUrl: "https://giavangmaothiet.com/tiem-vang-thanh-thanh-binh/",
   location: "TP.HCM",
   parse: (payload) => {
