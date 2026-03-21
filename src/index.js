@@ -87,7 +87,7 @@ async function processSource(source, getSharedPayload) {
 
         let parsed;
         try {
-          parsed = source.parse(payload);
+          parsed = await source.parse(payload);
         } catch (error) {
           const displayUrl = source.webUrl ?? source.url;
           return {

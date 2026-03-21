@@ -18,10 +18,11 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -30,7 +31,12 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm install
+        run: npm ci --include=optional
+
+      - name: Ensure sharp linux-x64 runtime
+        run: |
+          npm install --no-save --include=optional --os=linux --cpu=x64 sharp
+          node -e "import('sharp').then(() => console.log('sharp ok on linux-x64'))"
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
