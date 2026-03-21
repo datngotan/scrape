@@ -37,10 +37,12 @@ function parsePriceToken(raw) {
 }
 
 function parseBuySellByLabel(payload, label) {
-  const text = stripHtmlToText(payload);
+  const raw = String(payload || "");
+  const text = stripHtmlToText(raw);
   const normalizedLabel = normalizeText(label);
 
-  const lines = text.split(/\r?\n/);
+  // Support markdown table payloads from r.jina.ai.
+  const lines = raw.split(/\r?\n/);
   for (const line of lines) {
     if (!line.includes("|")) continue;
 
@@ -49,6 +51,25 @@ function parseBuySellByLabel(payload, label) {
     if (!nameCell) continue;
 
     const idx = cells.indexOf(nameCell);
+    const buy = parsePriceToken(cells[idx + 1] ?? "");
+    const sell = parsePriceToken(cells[idx + 2] ?? "");
+    if (buy != null && sell != null) return { buy, sell };
+  }
+
+  // Support direct HTML payloads by scanning table rows/cells.
+  const rows = raw.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+  for (const rowHtml of rows) {
+    const rowText = stripHtmlToText(rowHtml);
+    if (!normalizeText(rowText).includes(normalizedLabel)) continue;
+
+    const cells = [...rowHtml.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
+      .map((m) => stripHtmlToText(m[1]))
+      .filter(Boolean);
+    if (cells.length < 3) continue;
+
+    const idx = cells.findIndex((cell) => normalizeText(cell) === normalizedLabel);
+    if (idx < 0) continue;
+
     const buy = parsePriceToken(cells[idx + 1] ?? "");
     const sell = parsePriceToken(cells[idx + 2] ?? "");
     if (buy != null && sell != null) return { buy, sell };
@@ -88,7 +109,7 @@ export const NGOC_CUA_NHA_BE_SOURCES = NGOC_CUA_NHA_BE_PRODUCTS.map((product) =>
   id: product.id,
   name: product.name,
   storeName: "Ngọc Của Nhà Bè",
-  url: "https://r.jina.ai/https://ngoccuanhabe.com/",
+  url: "https://ngoccuanhabe.com/",
   webUrl: "https://ngoccuanhabe.com/",
   location: "TP.HCM",
   parse: (payload) => {
