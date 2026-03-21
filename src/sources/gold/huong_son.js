@@ -3,8 +3,8 @@ import { nowVnText, stripHtmlToText } from "../../utils.js";
 const HUONG_SON_PRODUCTS = [
   {
     id: "huong_son_vang_999_lan_7",
-    name: "Hương Sơn (Vàng 9999)",
-    label: "Vàng 9999 Hương Sơn",
+    name: "Hương Sơn (Vàng 99.9)",
+    label: "Vàng 99.9",
   },
   {
     id: "huong_son_vang_950",
@@ -26,7 +26,8 @@ function normalizeText(input) {
 
 function buildLabelPrefix(label) {
   const normalized = normalizeText(label)
-    .replace(/\bvang\s+99\s*9\b/g, "vang 999")
+    .replace(/\bvang\s+9999\b/g, "vang 99 9")
+    .replace(/\bvang\s+99\s*9\b/g, "vang 99 9")
     .replace(/\blan\s+\d+\b/g, " ")
     .replace(/\bhuong\s+son\b/g, " ")
     .trim()

@@ -4,27 +4,27 @@ const DAI_NGHIA_PRODUCTS = [
   {
     id: "dai_nghia_9999_vi",
     name: "Đại Nghĩa (9999 vĩ)",
-    label: "9999 vĩ",
+    labels: ["9999 vĩ", "9999"],
   },
   {
     id: "dai_nghia_nhan_tron_9999",
     name: "Đại Nghĩa (Nhẫn Tròn 9999 Đại Nghĩa)",
-    label: "Nhẫn Tròn 9999 Đại Nghĩa",
+    labels: ["Nhẫn Tròn 9999 Đại Nghĩa", "9999"],
   },
   {
     id: "dai_nghia_vang_98",
     name: "Đại Nghĩa (Vàng 98)",
-    label: "Vàng 98",
+    labels: ["Vàng 98", "980"],
   },
   {
     id: "dai_nghia_vang_96",
     name: "Đại Nghĩa (Vàng 96%)",
-    label: "Vàng 96%",
+    labels: ["Vàng 96%", "960"],
   },
   {
     id: "dai_nghia_nu_trang_980",
     name: "Đại Nghĩa (Nữ trang 980)",
-    label: "Nữ trang 980",
+    labels: ["Nữ trang 980", "980"],
   },
 ];
 
@@ -64,15 +64,18 @@ function parseBuySellFromPipeLine(line) {
   return { buy, sell };
 }
 
-function parseBuySellByLabel(payload, label) {
-  const normalizedLabel = normalizeText(label);
+function parseBuySellByLabel(payload, labels) {
+  const normalizedLabels = labels.map((label) => normalizeText(label));
   const raw = String(payload || "");
   const lines = raw.split(/\r?\n/);
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (!line.includes("|")) continue;
-    if (!normalizeText(line).includes(normalizedLabel)) continue;
+    const normalizedLine = normalizeText(line);
+    if (!normalizedLabels.some((normalizedLabel) => normalizedLine.includes(normalizedLabel))) {
+      continue;
+    }
 
     const direct = parseBuySellFromPipeLine(line);
     if (direct.buy != null && direct.sell != null) return direct;
@@ -85,18 +88,24 @@ function parseBuySellByLabel(payload, label) {
   }
 
   const text = stripHtmlToText(raw);
-  const escapedLabel = normalizedLabel
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/ /g, "\\s*");
   const token = "(\\d[\\d.,]*)";
-  const m = normalizeText(text).match(
-    new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
-  );
-  if (!m) return { buy: null, sell: null };
+  const normalizedText = normalizeText(text);
 
-  const buy = parsePriceToken(m[1]);
-  const sell = parsePriceToken(m[2]);
-  return { buy, sell };
+  for (const normalizedLabel of normalizedLabels) {
+    const escapedLabel = normalizedLabel
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/ /g, "\\s*");
+    const m = normalizedText.match(
+      new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
+    );
+    if (!m) continue;
+
+    const buy = parsePriceToken(m[1]);
+    const sell = parsePriceToken(m[2]);
+    return { buy, sell };
+  }
+
+  return { buy: null, sell: null };
 }
 
 function parseTime(payload) {
@@ -121,10 +130,10 @@ export const DAI_NGHIA_SOURCES = DAI_NGHIA_PRODUCTS.map((product) => ({
   storeName: "Vàng Bạc Đại Nghĩa",
   location: "Nam Định",
   unit: "chi",
-  url: "https://r.jina.ai/http://vangdainghia.com/",
-  webUrl: "https://vangdainghia.com/",
+  url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
+  webUrl: "https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
   parse: (payload) => {
-    const { buy, sell } = parseBuySellByLabel(payload, product.label);
+    const { buy, sell } = parseBuySellByLabel(payload, product.labels);
     return {
       buy,
       sell,
