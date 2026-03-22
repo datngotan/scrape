@@ -83,7 +83,7 @@ export const MY_HANH_SOURCES = MY_HANH_PRODUCTS.map((product) => ({
   storeName: "Tiệm Vàng Mỹ Hạnh",
   url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-my-hanh-hom-nay/",
   webUrl: "https://giavangmaothiet.com/gia-vang-my-hanh-hom-nay/",
-  location: "Hà Đông, Hà Nội",
+  location: "Hà Nội",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);
     return {
