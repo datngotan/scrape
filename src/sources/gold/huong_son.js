@@ -36,6 +36,50 @@ function buildLabelPrefix(label) {
   return normalized;
 }
 
+function normalizeProductCell(input) {
+  return normalizeText(input).replace(/\blan\s+\d+\b/g, " ").trim();
+}
+
+function isMarkdownSeparatorRow(cells) {
+  if (!Array.isArray(cells) || cells.length < 3) return false;
+  return cells.every((cell) => /^[:\-\s]+$/.test(cell));
+}
+
+function splitMarkdownRow(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.includes("|")) return [];
+
+  return trimmed
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter((cell, idx, arr) => {
+      if (idx === 0 && cell === "") return false;
+      if (idx === arr.length - 1 && cell === "") return false;
+      return true;
+    });
+}
+
+function matchProductName(cells, labelPrefix, normalizedLabel) {
+  const normalizedPrefix = normalizeProductCell(labelPrefix);
+  const normalizedTarget = normalizeProductCell(normalizedLabel);
+
+  for (let idx = 0; idx < cells.length; idx++) {
+    const normalizedCell = normalizeProductCell(cells[idx]);
+    if (!normalizedCell) continue;
+
+    if (
+      normalizedCell === normalizedTarget ||
+      normalizedCell === normalizedPrefix ||
+      normalizedCell.startsWith(`${normalizedPrefix} `) ||
+      normalizedCell.startsWith(`${normalizedTarget} `)
+    ) {
+      return idx;
+    }
+  }
+
+  return -1;
+}
+
 function parsePriceToken(raw) {
   const digits = String(raw || "").replace(/[^\d]/g, "");
   if (!digits) return null;
@@ -49,28 +93,40 @@ function parsePriceToken(raw) {
 }
 
 function parseBuySellByLabel(payload, label) {
+  const raw = String(payload || "");
   const text = stripHtmlToText(payload);
   const normalizedLabel = normalizeText(label);
   const labelPrefix = buildLabelPrefix(label) || normalizedLabel;
 
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.includes("|")) continue;
+  // Parse markdown table rows from raw payload so wrapped labels like
+  // "Vàng 950 (lần\n20)" can still be reconstructed.
+  const lines = raw.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const first = String(lines[i] || "").trim();
+    if (!first.includes("|")) continue;
 
-    const cells = line.split("|").map((cell) => cell.trim());
-    const nameCell = cells.find((cell) => {
-      const normalizedCell = normalizeText(cell).replace(/\blan\s+\d+\b/g, " ").trim();
-      return (
-        normalizedCell === normalizedLabel ||
-        normalizedCell === labelPrefix ||
-        normalizedCell.startsWith(`${labelPrefix} `)
-      );
-    });
-    if (!nameCell) continue;
+    let mergedRow = first;
+    let next = i + 1;
+    while ((mergedRow.match(/\|/g) ?? []).length < 4 && next < lines.length) {
+      const candidate = String(lines[next] || "").trim();
+      if (!candidate) {
+        next++;
+        continue;
+      }
 
-    const idx = cells.indexOf(nameCell);
-    const buy = parsePriceToken(cells[idx + 1] ?? "");
-    const sell = parsePriceToken(cells[idx + 2] ?? "");
+      mergedRow += ` ${candidate}`;
+      next++;
+    }
+
+    i = next - 1;
+    const cells = splitMarkdownRow(mergedRow);
+    if (cells.length < 3 || isMarkdownSeparatorRow(cells.slice(0, 3))) continue;
+
+    const nameIdx = matchProductName(cells, labelPrefix, normalizedLabel);
+    if (nameIdx < 0) continue;
+
+    const buy = parsePriceToken(cells[nameIdx + 1] ?? "");
+    const sell = parsePriceToken(cells[nameIdx + 2] ?? "");
     if (buy != null && sell != null) return { buy, sell };
   }
 
@@ -87,6 +143,18 @@ function parseBuySellByLabel(payload, label) {
     const buy = parsePriceToken(m[1]);
     const sell = parsePriceToken(m[2]);
     if (buy != null && sell != null) return { buy, sell };
+  }
+
+  // Last-resort fallback: locate nearest two price tokens after the label.
+  const compact = normalizeText(raw);
+  const idx = compact.indexOf(labelPrefix);
+  if (idx >= 0) {
+    const tailRaw = raw.slice(Math.max(0, Math.floor((idx / compact.length) * raw.length)));
+    const tokens = tailRaw.match(/\d{1,3}(?:[.,]\d{3})+/g) ?? [];
+    const prices = tokens.map(parsePriceToken).filter((n) => n != null);
+    if (prices.length >= 2) {
+      return { buy: prices[0], sell: prices[1] };
+    }
   }
 
   return { buy: null, sell: null };
@@ -111,6 +179,13 @@ export const HUONG_SON_SOURCES = HUONG_SON_PRODUCTS.map((product) => ({
   location: "Ninh Bình",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);
+
+    if (buy == null || sell == null) {
+      throw new Error(
+        `Unable to parse Hương Sơn prices for \"${product.label}\"`,
+      );
+    }
+
     return {
       buy,
       sell,

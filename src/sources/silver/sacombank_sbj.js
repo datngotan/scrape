@@ -43,22 +43,69 @@ function parseDateParts(input) {
   };
 }
 
+function withHttpsProtocol(url) {
+  if (!url) return null;
+  if (url.startsWith("//")) return `https:${url}`;
+  return url;
+}
+
+function buildImageVariants(url) {
+  const input = withHttpsProtocol(String(url || "").trim());
+  if (!input) return [];
+
+  const variants = [input];
+
+  // Keep the currently rendered image URL as primary, then try a higher-res
+  // variant for better OCR quality when available.
+  if (/_medium(?=\.[a-z]+(?:\?|$))/i.test(input)) {
+    variants.push(input.replace(/_medium(?=\.[a-z]+(?:\?|$))/i, "_1024x1024"));
+  }
+
+  return variants;
+}
+
 function collectSilverBoardImages(payload) {
   const html = String(payload || "");
   const $ = cheerio.load(html);
 
   const images = [];
-  $("img").each((_, el) => {
-    const src = resolveImageUrl("https://sacombank-sbj.com", $(el).attr("src"));
-    if (!src) return;
-    if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
-    const alt = $(el).attr("alt") || "";
-    const url = src.replace(/_medium(?=\.[a-z]+$)/i, "");
-    images.push({ url, alt });
+  // Primary source of truth: first board image currently displayed in the list.
+  const firstDisplayedSrc = $(".sidebar_blog_article-bgv .giavang-img img")
+    .first()
+    .attr("src");
+  if (firstDisplayedSrc) {
+    const firstDisplayedUrl = resolveImageUrl(
+      "https://sacombank-sbj.com",
+      firstDisplayedSrc,
+    );
+    for (const url of buildImageVariants(firstDisplayedUrl)) {
+      images.push({ url, alt: "", score: 1000 });
+    }
+  }
+
+  // Second source of truth: latest board image from preload link.
+  const preloadHref = withHttpsProtocol(
+    $("link[rel='preload'][as='image']").first().attr("href") || "",
+  );
+  if (
+    preloadHref &&
+    preloadHref.includes("cdn.hstatic.net") &&
+    preloadHref.includes("/article/") &&
+    /\bl\d+_/i.test(preloadHref)
+  ) {
+    for (const url of buildImageVariants(preloadHref)) {
+      images.push({ url, alt: "", score: 900 });
+    }
+  }
+
+  // Deduplicate while preserving priority order.
+  const seen = new Set();
+  return images.filter((img) => {
+    if (seen.has(img.url)) return false;
+    seen.add(img.url);
+    return true;
   });
-
-  return images;
 }
 
 function parseLastUpdateText(payload, ocrText, imageMeta) {
@@ -101,111 +148,120 @@ function classifyLine(line) {
 }
 
 function parseRowsFromOcrText(text) {
-  const rows = {
-    luong: { buy: null, sell: null },
-    kg: { buy: null, sell: null },
-    myNghe: { buy: null, sell: null },
-  };
+  const pricesInOrder = (String(text || "").match(PRICE_RE) ?? [])
+    .map((raw) => parseSilverPriceToThousand(raw))
+    .filter((n) => n != null);
 
-  const lines = String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  // Board order is stable:
+  // Buy column:   row1 luong, row2 kg, row3 myNghe
+  // Sell column:  row1 luong, row2 kg, row3 myNghe
+  if (pricesInOrder.length >= 5) {
+    const luongBuy = pricesInOrder[0] ?? null;
+    const kgBuy = pricesInOrder[1] ?? null;
+    const myNgheBuy = pricesInOrder[2] ?? luongBuy;
+    const luongSell = pricesInOrder[3] ?? null;
+    const kgSell = pricesInOrder[4] ?? null;
+    const myNgheSell = pricesInOrder[5] ?? luongSell;
 
-  // Pass 1: lines with 2+ prices (old row-per-line format)
-  const pricedLines = [];
-  for (const line of lines) {
-    const nums = (line.match(PRICE_RE) ?? [])
-      .map((raw) => parseSilverPriceToThousand(raw))
-      .filter((n) => n != null);
-    if (nums.length < 2) continue;
-    const pair = { buy: nums[nums.length - 2], sell: nums[nums.length - 1] };
-    const label = classifyLine(line);
-    if (label === "kg" && rows.kg.buy == null) rows.kg = pair;
-    else if (label === "luong" && rows.luong.buy == null) rows.luong = pair;
-    else if (label === "myNghe" && rows.myNghe.buy == null) rows.myNghe = pair;
-    else pricedLines.push(pair);
-  }
-
-  if (rows.luong.buy == null && pricedLines.length >= 1)
-    rows.luong = pricedLines[0];
-  if (rows.kg.buy == null && pricedLines.length >= 2) rows.kg = pricedLines[1];
-
-  if (rows.luong.buy != null && rows.kg.buy != null) {
-    if (rows.myNghe.buy == null) {
-      rows.myNghe =
-        pricedLines.length >= 1
-          ? pricedLines[0]
-          : { buy: rows.luong.buy, sell: rows.luong.sell };
-    }
-    return rows;
-  }
-
-  // Pass 2: single-price lines (PSM 4 column-read format)
-  const labeledPrices = { luong: [], kg: [], myNghe: [] };
-  const unlabeled = [];
-  for (const line of lines) {
-    const nums = (line.match(PRICE_RE) ?? [])
-      .map((raw) => parseSilverPriceToThousand(raw))
-      .filter((n) => n != null);
-    if (nums.length === 0) continue;
-    const label = classifyLine(line);
-    if (label) {
-      for (const v of nums) labeledPrices[label].push(v);
-    } else {
-      for (const v of nums) unlabeled.push(v);
-    }
-  }
-
-  if (rows.luong.buy == null && labeledPrices.luong.length >= 1) {
-    rows.luong.buy = labeledPrices.luong[0];
-  }
-  if (rows.kg.buy == null && labeledPrices.kg.length >= 1) {
-    rows.kg.buy = labeledPrices.kg[0];
-  }
-
-  // Unlabeled prices are sell values in order: luong sell, kg sell, myNghe sell
-  let ui = 0;
-  if (
-    rows.luong.sell == null &&
-    rows.luong.buy != null &&
-    ui < unlabeled.length
-  ) {
-    rows.luong.sell = unlabeled[ui++];
-  }
-  if (rows.kg.sell == null && rows.kg.buy != null && ui < unlabeled.length) {
-    rows.kg.sell = unlabeled[ui++];
-  }
-  if (rows.myNghe.buy == null && ui < unlabeled.length) {
-    rows.myNghe = {
-      buy: rows.luong.buy ?? unlabeled[ui],
-      sell: unlabeled[ui++],
+    return {
+      luong: { buy: luongBuy, sell: luongSell },
+      kg: { buy: kgBuy, sell: kgSell },
+      myNghe: { buy: myNgheBuy, sell: myNgheSell },
     };
   }
 
-  if (rows.myNghe.buy == null && rows.luong.buy != null) {
-    rows.myNghe = { buy: rows.luong.buy, sell: rows.luong.sell };
-  }
-
-  return rows;
+  // Minimal fallback when OCR misses numbers.
+  return {
+    luong: { buy: pricesInOrder[0] ?? null, sell: pricesInOrder[3] ?? null },
+    kg: { buy: pricesInOrder[1] ?? null, sell: pricesInOrder[4] ?? null },
+    myNghe: {
+      buy: pricesInOrder[2] ?? pricesInOrder[0] ?? null,
+      sell: pricesInOrder[5] ?? pricesInOrder[3] ?? null,
+    },
+  };
 }
 
 async function ocrOneImage(url) {
   const imageBuffer = Buffer.from(await (await fetch(url)).arrayBuffer());
-  const preprocessed = await sharp(imageBuffer)
-    .grayscale()
-    .normalize()
-    .resize({ width: 2600 })
-    .sharpen()
-    .threshold(120)
-    .png()
-    .toBuffer();
+
+  const variants = [
+    sharp(imageBuffer)
+      .grayscale()
+      .normalize()
+      .resize({ width: 2800 })
+      .sharpen({ sigma: 1.2 })
+      .threshold(115)
+      .png()
+      .toBuffer(),
+    sharp(imageBuffer)
+      .grayscale()
+      .normalize()
+      .resize({ width: 2800 })
+      .sharpen({ sigma: 1.0 })
+      .threshold(130)
+      .png()
+      .toBuffer(),
+    sharp(imageBuffer)
+      .grayscale()
+      .normalize()
+      .resize({ width: 2600 })
+      .sharpen({ sigma: 0.9 })
+      .png()
+      .toBuffer(),
+  ];
 
   const worker = await createWorker("eng");
   try {
-    await worker.setParameters({ tessedit_pageseg_mode: "4" });
-    const { data } = await worker.recognize(preprocessed);
-    return String(data.text || "");
+    const texts = [];
+    for (const psm of [4, 6]) {
+      await worker.setParameters({
+        tessedit_pageseg_mode: String(psm),
+        tessedit_char_whitelist: "0123456789,.:/hHkKgGlLiIuUnN ",
+      });
+
+      for (const bufferPromise of variants) {
+        const preprocessed = await bufferPromise;
+        const { data } = await worker.recognize(preprocessed);
+        texts.push(String(data.text || ""));
+      }
+    }
+
+    const scored = texts
+      .map((text) => {
+        const rows = parseRowsFromOcrText(text);
+        const lb = rows.luong.buy ?? 0;
+        const ls = rows.luong.sell ?? 0;
+        const kb = rows.kg.buy ?? 0;
+        const ks = rows.kg.sell ?? 0;
+
+        let score = 0;
+        if (lb > 0) score += 8;
+        if (kb > 0) score += 8;
+        if (ls > lb) score += 5;
+        if (ks > kb) score += 5;
+
+        if (lb > 0 && kb > 0) {
+          const ratio = kb / lb;
+          score += Math.max(0, 10 - Math.abs(ratio - 26.666));
+        }
+
+        if (lb > 0 && ls > 0) {
+          const spread = ls / lb;
+          if (spread <= 1.06) score += 8;
+          else if (spread <= 1.09) score += 4;
+        }
+
+        if (kb > 0 && ks > 0) {
+          const spread = ks / kb;
+          if (spread <= 1.06) score += 8;
+          else if (spread <= 1.09) score += 4;
+        }
+
+        return { text, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    return scored[0]?.text ?? "";
   } finally {
     await worker.terminate();
   }
