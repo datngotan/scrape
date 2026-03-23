@@ -43,42 +43,22 @@ function parseDateParts(input) {
   };
 }
 
-function pickLatestSilverBoard(payload) {
+function collectSilverBoardImages(payload) {
   const html = String(payload || "");
   const $ = cheerio.load(html);
 
-  const candidates = [];
+  const images = [];
   $("img").each((_, el) => {
     const src = resolveImageUrl("https://sacombank-sbj.com", $(el).attr("src"));
     if (!src) return;
     if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
-    const normalized = src.toLowerCase();
     const alt = $(el).attr("alt") || "";
-    const date = parseDateParts(alt);
-    if (!date) return;
-
-    const urlBoardMatch = normalized.match(/\/l(\d+)_/i);
-    const altBoardMatch = alt.match(/[Bb]ảng\s+(\d+)/);
-    if (!urlBoardMatch && !altBoardMatch) return;
-    const boardNo = urlBoardMatch
-      ? Number(urlBoardMatch[1])
-      : Number(altBoardMatch[1]);
-    const fullUrl = src.replace(/_medium(?=\.[a-z]+$)/i, "");
-    candidates.push({
-      url: fullUrl,
-      alt,
-      boardNo: Number.isFinite(boardNo) ? boardNo : 0,
-      dateKey: date ? `${date.yyyy}${date.mm}${date.dd}` : "00000000",
-    });
+    const url = src.replace(/_medium(?=\.[a-z]+$)/i, "");
+    images.push({ url, alt });
   });
 
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => {
-    if (a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
-    return b.boardNo - a.boardNo;
-  });
-  return candidates[0];
+  return images;
 }
 
 function parseLastUpdateText(payload, ocrText, imageMeta) {
@@ -210,20 +190,8 @@ function parseRowsFromOcrText(text) {
   return rows;
 }
 
-async function ocrSilverBoard(payload) {
-  const board = pickLatestSilverBoard(payload);
-  if (!board?.url) {
-    return {
-      rows: {
-        luong: { buy: null, sell: null },
-        kg: { buy: null, sell: null },
-        myNghe: { buy: null, sell: null },
-      },
-      lastUpdateText: nowVnText(),
-    };
-  }
-
-  const imageBuffer = Buffer.from(await (await fetch(board.url)).arrayBuffer());
+async function ocrOneImage(url) {
+  const imageBuffer = Buffer.from(await (await fetch(url)).arrayBuffer());
   const preprocessed = await sharp(imageBuffer)
     .grayscale()
     .normalize()
@@ -237,15 +205,47 @@ async function ocrSilverBoard(payload) {
   try {
     await worker.setParameters({ tessedit_pageseg_mode: "4" });
     const { data } = await worker.recognize(preprocessed);
-    const text = String(data.text || "");
-
-    return {
-      rows: parseRowsFromOcrText(text),
-      lastUpdateText: parseLastUpdateText(payload, text, board),
-    };
+    return String(data.text || "");
   } finally {
     await worker.terminate();
   }
+}
+
+const MAX_IMAGES_TO_TRY = 5;
+
+async function ocrSilverBoard(payload) {
+  const images = collectSilverBoardImages(payload);
+  if (images.length === 0) {
+    return {
+      rows: {
+        luong: { buy: null, sell: null },
+        kg: { buy: null, sell: null },
+        myNghe: { buy: null, sell: null },
+      },
+      lastUpdateText: nowVnText(),
+    };
+  }
+
+  for (let i = 0; i < Math.min(images.length, MAX_IMAGES_TO_TRY); i++) {
+    const img = images[i];
+    const text = await ocrOneImage(img.url);
+    const rows = parseRowsFromOcrText(text);
+
+    if (rows.luong.buy != null && rows.kg.buy != null) {
+      return {
+        rows,
+        lastUpdateText: parseLastUpdateText(payload, text, img),
+      };
+    }
+  }
+
+  // Fallback: OCR first image and return whatever it has
+  const img = images[0];
+  const text = await ocrOneImage(img.url);
+  return {
+    rows: parseRowsFromOcrText(text),
+    lastUpdateText: parseLastUpdateText(payload, text, img),
+  };
 }
 
 function getSilverBoardPromise(payload) {

@@ -85,34 +85,19 @@ function pickLatestBoardImage(payload) {
   const html = String(payload || "");
   const $ = cheerio.load(html);
 
-  const candidates = [];
+  let first = null;
   $("img").each((_, el) => {
+    if (first) return;
     const src = resolveImageUrl("https://sacombank-sbj.com", $(el).attr("src"));
     if (!src) return;
     if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
-    const normalized = src.toLowerCase();
     const alt = $(el).attr("alt") || "";
-    const dateKey = dateKeyFromText(alt);
-    if (!dateKey) return;
-
-    if (!/(cn_|ch_|cn\d|ch\d)/.test(normalized)) return;
-
-    const full = src.replace(/_medium(?=\.[a-z]+$)/i, "");
-    // Prefer CH board (head store) over CN board.
-    const isCh = /\/ch[_\d]/.test(normalized);
-    const boardMatch = alt.match(/[Bb]ảng\s+(\d+)/);
-    const boardNo = boardMatch ? Number(boardMatch[1]) : 0;
-    const score = (isCh ? 1000 : 0) + boardNo;
-    candidates.push({ url: full, score, alt, dateKey });
+    const url = src.replace(/_medium(?=\.[a-z]+$)/i, "");
+    first = { url, alt };
   });
 
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => {
-    if (a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
-    return b.score - a.score;
-  });
-  return candidates[0];
+  return first;
 }
 
 function parseLastUpdateText(payload, ocrText, imageMeta) {
