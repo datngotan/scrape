@@ -16,7 +16,7 @@ const SACOMBANK_SBJ_SILVER_PRODUCTS = [
     name: "Sacombank-SBJ (Bạc kim phúc lộc)",
     type: "kg",
     unit: "kg",
-  }
+  },
 ];
 
 let lastPayloadKey = "";
@@ -54,12 +54,16 @@ function pickLatestSilverBoard(payload) {
     if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
     const normalized = src.toLowerCase();
-    const boardMatch = normalized.match(/\/l(\d+)_/i);
-    if (!boardMatch) return;
-
     const alt = $(el).attr("alt") || "";
     const date = parseDateParts(alt);
-    const boardNo = Number(boardMatch[1]);
+    if (!date) return;
+
+    const urlBoardMatch = normalized.match(/\/l(\d+)_/i);
+    const altBoardMatch = alt.match(/[Bb]ảng\s+(\d+)/);
+    if (!urlBoardMatch && !altBoardMatch) return;
+    const boardNo = urlBoardMatch
+      ? Number(urlBoardMatch[1])
+      : Number(altBoardMatch[1]);
     const fullUrl = src.replace(/_medium(?=\.[a-z]+$)/i, "");
     candidates.push({
       url: fullUrl,
@@ -93,14 +97,6 @@ function parseLastUpdateText(payload, ocrText, imageMeta) {
   return `00:00:00 ${date.dd}/${date.mm}/${date.yyyy}`;
 }
 
-function extractTwoPrices(line) {
-  const nums = (String(line || "").match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [])
-    .map((raw) => parseSilverPriceToThousand(raw))
-    .filter((n) => n != null);
-  if (nums.length < 2) return { buy: null, sell: null };
-  return { buy: nums[nums.length - 2], sell: nums[nums.length - 1] };
-}
-
 function normalizeText(input) {
   return String(input || "")
     .toLowerCase()
@@ -112,74 +108,103 @@ function normalizeText(input) {
     .replace(/\s+/g, " ");
 }
 
+const LUONG_RE = /[li]u.{0,2}ng/i;
+const PRICE_RE = /\d{1,3}(?:[.,]\d{3}){1,2}/g;
+
+function classifyLine(line) {
+  const normalized = normalizeText(line);
+  if (normalized.includes("my nghe") || normalized.includes("limited"))
+    return "myNghe";
+  if (line.toLowerCase().includes("kg")) return "kg";
+  if (LUONG_RE.test(line)) return "luong";
+  return null;
+}
+
 function parseRowsFromOcrText(text) {
   const rows = {
     luong: { buy: null, sell: null },
     kg: { buy: null, sell: null },
     myNghe: { buy: null, sell: null },
   };
-  const pricedLines = [];
-  let myNgheSinglePrice = null;
 
   const lines = String(text || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
+  // Pass 1: lines with 2+ prices (old row-per-line format)
+  const pricedLines = [];
   for (const line of lines) {
-    const lower = line.toLowerCase();
-    const normalizedLine = normalizeText(line);
-
-    if (
-      rows.myNghe.buy == null &&
-      (normalizedLine.includes("my nghe") || normalizedLine.includes("limited"))
-    ) {
-      const nums = (line.match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [])
-        .map((raw) => parseSilverPriceToThousand(raw))
-        .filter((n) => n != null);
-      if (nums.length >= 2) {
-        rows.myNghe = { buy: nums[nums.length - 2], sell: nums[nums.length - 1] };
-      } else if (nums.length === 1) {
-        myNgheSinglePrice = nums[0];
-      }
-    }
-
-    const prices = extractTwoPrices(line);
-    if (prices.buy == null || prices.sell == null) continue;
-    pricedLines.push(prices);
-
-    if (lower.includes("kg") && rows.kg.buy == null) {
-      rows.kg = prices;
-      continue;
-    }
-
-    if ((/\bl\b/.test(lower) || lower.includes("luong")) && rows.luong.buy == null) {
-      rows.luong = prices;
-    }
+    const nums = (line.match(PRICE_RE) ?? [])
+      .map((raw) => parseSilverPriceToThousand(raw))
+      .filter((n) => n != null);
+    if (nums.length < 2) continue;
+    const pair = { buy: nums[nums.length - 2], sell: nums[nums.length - 1] };
+    const label = classifyLine(line);
+    if (label === "kg" && rows.kg.buy == null) rows.kg = pair;
+    else if (label === "luong" && rows.luong.buy == null) rows.luong = pair;
+    else if (label === "myNghe" && rows.myNghe.buy == null) rows.myNghe = pair;
+    else pricedLines.push(pair);
   }
 
-  // Fallback for noisy OCR labels: first priced row is often 1 luong, second is 1 kg.
-  if (rows.luong.buy == null && pricedLines.length >= 1) {
+  if (rows.luong.buy == null && pricedLines.length >= 1)
     rows.luong = pricedLines[0];
-  }
-  if (rows.kg.buy == null && pricedLines.length >= 2) {
-    rows.kg = pricedLines[1];
+  if (rows.kg.buy == null && pricedLines.length >= 2) rows.kg = pricedLines[1];
+
+  if (rows.luong.buy != null && rows.kg.buy != null) {
+    if (rows.myNghe.buy == null) {
+      rows.myNghe =
+        pricedLines.length >= 1
+          ? pricedLines[0]
+          : { buy: rows.luong.buy, sell: rows.luong.sell };
+    }
+    return rows;
   }
 
-  // Some boards display a single quoted value for Bac my nghe.
-  // Derive a usable pair by combining that value with luong sell if available.
-  if (rows.myNghe.buy == null && myNgheSinglePrice != null) {
+  // Pass 2: single-price lines (PSM 4 column-read format)
+  const labeledPrices = { luong: [], kg: [], myNghe: [] };
+  const unlabeled = [];
+  for (const line of lines) {
+    const nums = (line.match(PRICE_RE) ?? [])
+      .map((raw) => parseSilverPriceToThousand(raw))
+      .filter((n) => n != null);
+    if (nums.length === 0) continue;
+    const label = classifyLine(line);
+    if (label) {
+      for (const v of nums) labeledPrices[label].push(v);
+    } else {
+      for (const v of nums) unlabeled.push(v);
+    }
+  }
+
+  if (rows.luong.buy == null && labeledPrices.luong.length >= 1) {
+    rows.luong.buy = labeledPrices.luong[0];
+  }
+  if (rows.kg.buy == null && labeledPrices.kg.length >= 1) {
+    rows.kg.buy = labeledPrices.kg[0];
+  }
+
+  // Unlabeled prices are sell values in order: luong sell, kg sell, myNghe sell
+  let ui = 0;
+  if (
+    rows.luong.sell == null &&
+    rows.luong.buy != null &&
+    ui < unlabeled.length
+  ) {
+    rows.luong.sell = unlabeled[ui++];
+  }
+  if (rows.kg.sell == null && rows.kg.buy != null && ui < unlabeled.length) {
+    rows.kg.sell = unlabeled[ui++];
+  }
+  if (rows.myNghe.buy == null && ui < unlabeled.length) {
     rows.myNghe = {
-      buy: myNgheSinglePrice,
-      sell: rows.luong.sell ?? myNgheSinglePrice,
+      buy: rows.luong.buy ?? unlabeled[ui],
+      sell: unlabeled[ui++],
     };
   }
 
-  if (rows.myNghe.buy == null && rows.luong.buy != null && rows.luong.sell != null) {
-    rows.myNghe = {
-      buy: rows.luong.buy,
-      sell: rows.luong.sell,
-    };
+  if (rows.myNghe.buy == null && rows.luong.buy != null) {
+    rows.myNghe = { buy: rows.luong.buy, sell: rows.luong.sell };
   }
 
   return rows;
@@ -203,13 +228,14 @@ async function ocrSilverBoard(payload) {
     .grayscale()
     .normalize()
     .resize({ width: 2600 })
-    .linear(1.2, -15)
+    .sharpen()
+    .threshold(120)
     .png()
     .toBuffer();
 
   const worker = await createWorker("eng");
   try {
-    await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    await worker.setParameters({ tessedit_pageseg_mode: "4" });
     const { data } = await worker.recognize(preprocessed);
     const text = String(data.text || "");
 

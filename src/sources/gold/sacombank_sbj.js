@@ -92,13 +92,18 @@ function pickLatestBoardImage(payload) {
     if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
     const normalized = src.toLowerCase();
-    if (!/(cn_|ch_)/.test(normalized)) return;
+    const alt = $(el).attr("alt") || "";
+    const dateKey = dateKeyFromText(alt);
+    if (!dateKey) return;
+
+    if (!/(cn_|ch_|cn\d|ch\d)/.test(normalized)) return;
 
     const full = src.replace(/_medium(?=\.[a-z]+$)/i, "");
     // Prefer CH board (head store) over CN board.
-    const score = normalized.includes("/ch_") ? 2 : 1;
-    const alt = $(el).attr("alt") || "";
-    const dateKey = dateKeyFromText(alt) ?? "00000000";
+    const isCh = /\/ch[_\d]/.test(normalized);
+    const boardMatch = alt.match(/[Bb]ảng\s+(\d+)/);
+    const boardNo = boardMatch ? Number(boardMatch[1]) : 0;
+    const score = (isCh ? 1000 : 0) + boardNo;
     candidates.push({ url: full, score, alt, dateKey });
   });
 
@@ -159,12 +164,15 @@ async function ocrBoard(payload) {
     };
   }
 
-  const imageBuffer = Buffer.from(await (await fetch(imageMeta.url)).arrayBuffer());
+  const imageBuffer = Buffer.from(
+    await (await fetch(imageMeta.url)).arrayBuffer(),
+  );
   const preprocessed = await sharp(imageBuffer)
     .grayscale()
     .normalize()
     .resize({ width: 2600 })
-    .linear(1.15, -10)
+    .sharpen()
+    .threshold(120)
     .png()
     .toBuffer();
 
@@ -211,7 +219,9 @@ async function ocrBoard(payload) {
     // In that case, take ordered price pairs (row 1..10) from a second OCR pass.
     await worker.setParameters({ tessedit_pageseg_mode: "12" });
     const { data: dataPsm12 } = await worker.recognize(preprocessed);
-    const orderedRows = extractOrderedRowsFromText(String(dataPsm12.text || ""));
+    const orderedRows = extractOrderedRowsFromText(
+      String(dataPsm12.text || ""),
+    );
     for (const [rowNo, row] of orderedRows.entries()) {
       if (!rowsByNumber.has(rowNo)) rowsByNumber.set(rowNo, row);
     }
@@ -228,7 +238,9 @@ async function ocrBoard(payload) {
 
 function includesAllKeywords(text, keywords) {
   const normalized = normalizeText(text);
-  return keywords.every((keyword) => normalized.includes(normalizeText(keyword)));
+  return keywords.every((keyword) =>
+    normalized.includes(normalizeText(keyword)),
+  );
 }
 
 function pickRowForProduct(board, product) {
