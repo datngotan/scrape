@@ -4,7 +4,7 @@ const HUONG_SON_PRODUCTS = [
   {
     id: "huong_son_vang_999_lan_7",
     name: "Hương Sơn (Vàng 99.9)",
-    label: "Vàng 99.9",
+    label: "Vàng 9999 Hương Sơn",
   },
   {
     id: "huong_son_vang_950",
@@ -37,7 +37,9 @@ function buildLabelPrefix(label) {
 }
 
 function normalizeProductCell(input) {
-  return normalizeText(input).replace(/\blan\s+\d+\b/g, " ").trim();
+  return normalizeText(input)
+    .replace(/\blan\s+\d+\b/g, " ")
+    .trim();
 }
 
 function isMarkdownSeparatorRow(cells) {
@@ -92,9 +94,54 @@ function parsePriceToken(raw) {
   return n;
 }
 
+function buildRawLabelCandidates(label) {
+  const candidates = [String(label || "").trim()];
+  const raw = String(label || "");
+
+  if (/99\.?9/.test(raw)) {
+    candidates.push(raw.replace(/99\.?9/g, "9999"));
+  }
+
+  if (/hương\s*sơn/i.test(raw)) {
+    candidates.push(raw.replace(/\s*hương\s*sơn/gi, "").trim());
+  } else {
+    candidates.push(`${raw} Hương Sơn`.trim());
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function parseBuySellNearLabel(text, label) {
+  const rawText = String(text || "");
+  const haystack = rawText.toLowerCase();
+
+  for (const candidate of buildRawLabelCandidates(label)) {
+    const idx = haystack.indexOf(candidate.toLowerCase());
+    if (idx < 0) continue;
+
+    const scope = rawText.slice(idx, Math.min(rawText.length, idx + 260));
+    const tokens = scope.match(/\d{1,3}(?:\s*[.,]\s*\d{3}){1,2}/g) ?? [];
+    const prices = tokens
+      .map((token) => parsePriceToken(token))
+      .filter((n) => n != null && n >= 1000);
+
+    if (prices.length >= 2) {
+      return { buy: prices[0], sell: prices[1] };
+    }
+  }
+
+  return { buy: null, sell: null };
+}
+
 function parseBuySellByLabel(payload, label) {
   const raw = String(payload || "");
   const text = stripHtmlToText(payload);
+
+  const nearLabel = parseBuySellNearLabel(text, label);
+  if (nearLabel.buy != null && nearLabel.sell != null) {
+    return nearLabel;
+  }
+
   const normalizedLabel = normalizeText(label);
   const labelPrefix = buildLabelPrefix(label) || normalizedLabel;
 
@@ -149,7 +196,9 @@ function parseBuySellByLabel(payload, label) {
   const compact = normalizeText(raw);
   const idx = compact.indexOf(labelPrefix);
   if (idx >= 0) {
-    const tailRaw = raw.slice(Math.max(0, Math.floor((idx / compact.length) * raw.length)));
+    const tailRaw = raw.slice(
+      Math.max(0, Math.floor((idx / compact.length) * raw.length)),
+    );
     const tokens = tailRaw.match(/\d{1,3}(?:[.,]\d{3})+/g) ?? [];
     const prices = tokens.map(parsePriceToken).filter((n) => n != null);
     if (prices.length >= 2) {

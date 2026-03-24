@@ -19,6 +19,13 @@ const SACOMBANK_SBJ_SILVER_PRODUCTS = [
     keywords: ["kg"],
     unit: "kg",
   },
+  {
+    id: "sacombank_sbj_bac_my_nghe",
+    name: "Sacombank-SBJ (Bạc mỹ nghệ)",
+    rowNo: 3,
+    keywords: ["my nghe"],
+    unit: "luong",
+  },
 ];
 
 let lastPayloadKey = "";
