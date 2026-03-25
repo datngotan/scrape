@@ -39,15 +39,36 @@ function parsePriceToken(raw) {
 }
 
 function parseBuySellByLabel(payload, label) {
-  const text = stripHtmlToText(payload);
+  const rowMatches = String(payload || "").match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
   const normalizedLabel = normalizeText(label);
+
+  for (const rowHtml of rowMatches) {
+    const cells = [...rowHtml.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
+      .map((m) => stripHtmlToText(m[1]))
+      .filter(Boolean);
+
+    if (cells.length === 0) continue;
+
+    const idx = cells.findIndex(
+      (cell) => normalizeText(cell) === normalizedLabel,
+    );
+    if (idx < 0) continue;
+
+    const buy = parsePriceToken(cells[idx + 1] ?? "");
+    const sell = parsePriceToken(cells[idx + 2] ?? "");
+    if (buy != null && sell != null) return { buy, sell };
+  }
+
+  const text = stripHtmlToText(payload);
 
   const lines = text.split(/\r?\n/);
   for (const line of lines) {
     if (!line.includes("|")) continue;
 
     const cells = line.split("|").map((cell) => cell.trim());
-    const nameCell = cells.find((cell) => normalizeText(cell) === normalizedLabel);
+    const nameCell = cells.find(
+      (cell) => normalizeText(cell) === normalizedLabel,
+    );
     if (!nameCell) continue;
 
     const idx = cells.indexOf(nameCell);
@@ -96,7 +117,7 @@ export const ANH_MINH_GOLD_SOURCES = ANH_MINH_GOLD_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
   storeName: "Vàng Anh Minh",
-  url: "https://r.jina.ai/https://vanganhminh.com/",
+  url: "https://vanganhminh.com/",
   webUrl: "https://vanganhminh.com/",
   location: "Hà Nội",
   parse: (payload) => {
