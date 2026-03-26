@@ -92,23 +92,77 @@ function parseLastUpdateText(payload, ocrText, imageMeta) {
   return `00:00:00 ${dd}/${mm}/${yyyy}`;
 }
 
-function extractOrderedRowsFromText(text) {
-  const nums = (String(text || "").match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [])
-    .map((raw) => parseSilverPriceToThousand(raw))
-    .filter((n) => n != null);
+function extractRowsFromSparseText(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-  const rowsByNumber = new Map();
-  let rowNo = 1;
-  for (let i = 0; i + 1 < nums.length && rowNo <= 10; i += 2, rowNo += 1) {
-    rowsByNumber.set(rowNo, {
-      rowNo,
-      text: "",
-      buy: nums[i],
-      sell: nums[i + 1],
-    });
+  const priceOnlyRe = /^\d{1,3}(?:[.,]\d{3}){1,2}$/;
+
+  // Classify each line as price, product-name, or other.
+  const elements = [];
+  for (const line of lines) {
+    if (priceOnlyRe.test(line.replace(/\s+/g, ""))) {
+      const val = parseSilverPriceToThousand(line);
+      if (val != null) {
+        elements.push({ type: "price", value: val });
+        continue;
+      }
+    }
+    const norm = normalizeText(line);
+    if (norm.length > 8 && /\bbac\b|\bsbj\b/.test(norm)) {
+      elements.push({ type: "product", text: norm });
+    } else {
+      elements.push({ type: "other", text: norm });
+    }
   }
 
-  return rowsByNumber;
+  // For each product, collect nearest prices (prefer forward, fallback backward).
+  const rowsByNumber = new Map();
+  const rows = [];
+  let rowNo = 0;
+
+  for (let i = 0; i < elements.length; i++) {
+    if (elements[i].type !== "product") continue;
+    rowNo += 1;
+
+    const forwardPrices = [];
+    for (let j = i + 1; j < elements.length; j++) {
+      if (elements[j].type === "product") break;
+      if (elements[j].type === "price") forwardPrices.push(elements[j].value);
+    }
+
+    let prices = forwardPrices;
+    if (prices.length === 0) {
+      const backwardPrices = [];
+      for (let j = i - 1; j >= 0; j--) {
+        if (elements[j].type === "product") break;
+        if (elements[j].type === "price")
+          backwardPrices.unshift(elements[j].value);
+      }
+      prices = backwardPrices;
+    }
+
+    // Include next non-price line for context (unit text like VND/kg).
+    let fullText = elements[i].text;
+    if (i + 1 < elements.length && elements[i + 1].type === "other") {
+      fullText += " " + elements[i + 1].text;
+    }
+
+    const row = {
+      rowNo,
+      text: fullText,
+      buy: prices[0] ?? null,
+      sell: prices[1] ?? null,
+    };
+    if (row.buy != null) {
+      rowsByNumber.set(rowNo, row);
+      rows.push(row);
+    }
+  }
+
+  return { rowsByNumber, rows };
 }
 
 async function ocrBoard(payload) {
@@ -129,7 +183,7 @@ async function ocrBoard(payload) {
     .normalize()
     .resize({ width: 2600 })
     .sharpen()
-    .threshold(120)
+    .threshold(100)
     .png()
     .toBuffer();
 
@@ -147,40 +201,46 @@ async function ocrBoard(payload) {
       .filter(Boolean);
 
     const pricePattern = "(\\d{1,3}(?:[.,]\\d{3}){1,2})";
+    // Silver board has no row numbers, so match product text followed by two prices
     const rowRegex = new RegExp(
-      `^(\\d{1,2})[.)]?\\s+(.+?)\\s+${pricePattern}\\s+${pricePattern}$`,
+      `^(.+?)\\s+${pricePattern}\\s+${pricePattern}$`,
       "i",
     );
 
-    for (const line of lines) {
-      const m = line.match(rowRegex);
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(rowRegex);
       if (!m) continue;
 
-      const rowNo = Number(m[1]);
-      const buy = parseSilverPriceToThousand(m[3]);
-      const sell = parseSilverPriceToThousand(m[4]);
-      if (!Number.isFinite(rowNo) || buy == null || sell == null) continue;
+      const buy = parseSilverPriceToThousand(m[2]);
+      const sell = parseSilverPriceToThousand(m[3]);
+      if (buy == null || sell == null) continue;
+
+      // Use preceding lines as context for product identification,
+      // excluding the matched line itself (which may contain unit text like VND/luong).
+      const contextText = lines.slice(Math.max(0, i - 3), i).join(" ");
 
       const row = {
-        rowNo,
-        text: normalizeText(m[2]),
+        rowNo: 0,
+        text: normalizeText(contextText),
         buy,
         sell,
       };
 
-      rowsByNumber.set(rowNo, row);
+      // Only add to rows for keyword matching;
+      // rowsByNumber is populated by the PSM12 product-aware parser below.
       rows.push(row);
     }
 
     // Fallback: OCR can split product and prices into separate lines.
-    // In that case, take ordered price pairs (row 1..10) from a second OCR pass.
+    // Use a product-name-aware parser on a second OCR pass (sparse text mode).
     await worker.setParameters({ tessedit_pageseg_mode: "12" });
     const { data: dataPsm12 } = await worker.recognize(preprocessed);
-    const orderedRows = extractOrderedRowsFromText(
-      String(dataPsm12.text || ""),
-    );
-    for (const [rowNo, row] of orderedRows.entries()) {
-      if (!rowsByNumber.has(rowNo)) rowsByNumber.set(rowNo, row);
+    const sparse = extractRowsFromSparseText(String(dataPsm12.text || ""));
+    for (const [rowNo, row] of sparse.rowsByNumber.entries()) {
+      rowsByNumber.set(rowNo, row);
+    }
+    for (const row of sparse.rows) {
+      rows.push(row);
     }
 
     return {
