@@ -17,7 +17,7 @@ on:
 
 jobs:
   scrape:
-    runs-on: msi
+    runs-on: MSI
     timeout-minutes: 25
 
     steps:
