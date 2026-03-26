@@ -32,17 +32,35 @@ jobs:
           cache: npm
 
       - name: Install deps
+        shell: cmd
         run: npm ci --include=optional
 
       - name: Ensure sharp linux-x64 runtime
+        if: runner.os == 'Linux'
+        shell: cmd
         run: |
           npm install --no-save --include=optional --os=linux --cpu=x64 sharp
           node -e "import('sharp').then(() => console.log('sharp ok on linux-x64'))"
 
-      - name: Install Playwright browsers
+      - name: Ensure sharp win32-x64 runtime
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          npm install --no-save --include=optional --os=win32 --cpu=x64 sharp
+          node -e "import('sharp').then(() => console.log('sharp ok on win32-x64'))"
+
+      - name: Install Playwright browsers (Linux)
+        if: runner.os == 'Linux'
+        shell: cmd
         run: npx playwright install --with-deps
 
+      - name: Install Playwright browsers (non-Linux)
+        if: runner.os != 'Linux'
+        shell: cmd
+        run: npx playwright install
+
       - name: Run scraper
+        shell: cmd
         run: node scrape.js
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
