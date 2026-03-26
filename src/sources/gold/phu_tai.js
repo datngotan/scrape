@@ -68,18 +68,26 @@ function parseTime(html) {
 
 function parseBuySell(html) {
   const text = stripTags(html);
-  const escapedNeedle = NEEDLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+  const escapedNeedle = NEEDLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(
+    /\s+/g,
+    "\\s*",
+  );
 
   const token = "(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,6})";
 
-  // Common markdown row from r.jina.ai: | Nhan tron tron 999.9 | 17,250 | 17,550 |
+  // Common markdown row format: | Nhan tron tron 999.9 | 17,250 | 17,550 |
   let m = text.match(
-    new RegExp(`\\|\\s*${escapedNeedle}\\s*\\|\\s*${token}\\s*\\|\\s*${token}\\s*\\|`, "i"),
+    new RegExp(
+      `\\|\\s*${escapedNeedle}\\s*\\|\\s*${token}\\s*\\|\\s*${token}\\s*\\|`,
+      "i",
+    ),
   );
 
   // Fallback: flattened text without pipes.
   if (!m) {
-    m = text.match(new RegExp(`${escapedNeedle}[\\s\\S]{0,40}?${token}\\s+${token}`, "i"));
+    m = text.match(
+      new RegExp(`${escapedNeedle}[\\s\\S]{0,40}?${token}\\s+${token}`, "i"),
+    );
   }
 
   if (!m) return { buy: null, sell: null };

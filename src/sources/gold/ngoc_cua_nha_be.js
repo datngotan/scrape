@@ -41,13 +41,15 @@ function parseBuySellByLabel(payload, label) {
   const text = stripHtmlToText(raw);
   const normalizedLabel = normalizeText(label);
 
-  // Support markdown table payloads from r.jina.ai.
+  // Support markdown table payloads.
   const lines = raw.split(/\r?\n/);
   for (const line of lines) {
     if (!line.includes("|")) continue;
 
     const cells = line.split("|").map((cell) => cell.trim());
-    const nameCell = cells.find((cell) => normalizeText(cell) === normalizedLabel);
+    const nameCell = cells.find(
+      (cell) => normalizeText(cell) === normalizedLabel,
+    );
     if (!nameCell) continue;
 
     const idx = cells.indexOf(nameCell);
@@ -67,7 +69,9 @@ function parseBuySellByLabel(payload, label) {
       .filter(Boolean);
     if (cells.length < 3) continue;
 
-    const idx = cells.findIndex((cell) => normalizeText(cell) === normalizedLabel);
+    const idx = cells.findIndex(
+      (cell) => normalizeText(cell) === normalizedLabel,
+    );
     if (idx < 0) continue;
 
     const buy = parsePriceToken(cells[idx + 1] ?? "");
@@ -105,19 +109,21 @@ function parseTime(payload) {
   return nowVnText();
 }
 
-export const NGOC_CUA_NHA_BE_SOURCES = NGOC_CUA_NHA_BE_PRODUCTS.map((product) => ({
-  id: product.id,
-  name: product.name,
-  storeName: "Ngọc Của Nhà Bè",
-  url: "https://ngoccuanhabe.com/",
-  webUrl: "https://ngoccuanhabe.com/",
-  location: "TP.HCM",
-  parse: (payload) => {
-    const { buy, sell } = parseBuySellByLabel(payload, product.label);
-    return {
-      buy,
-      sell,
-      lastUpdateText: parseTime(payload),
-    };
-  },
-}));
+export const NGOC_CUA_NHA_BE_SOURCES = NGOC_CUA_NHA_BE_PRODUCTS.map(
+  (product) => ({
+    id: product.id,
+    name: product.name,
+    storeName: "Ngọc Của Nhà Bè",
+    url: "https://ngoccuanhabe.com/",
+    webUrl: "https://ngoccuanhabe.com/",
+    location: "TP.HCM",
+    parse: (payload) => {
+      const { buy, sell } = parseBuySellByLabel(payload, product.label);
+      return {
+        buy,
+        sell,
+        lastUpdateText: parseTime(payload),
+      };
+    },
+  }),
+);

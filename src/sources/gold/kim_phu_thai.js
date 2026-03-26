@@ -156,7 +156,7 @@ export const KIM_PHU_THAI_SOURCES = KIM_PHU_THAI_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
   storeName: "Kim Phú Thái",
-  url: "https://r.jina.ai/https://kimphuthai.vn/",
+  url: "https://kimphuthai.vn/",
   webUrl: "https://kimphuthai.vn/",
   location: "Hà Nội",
   parse: (payload) => {

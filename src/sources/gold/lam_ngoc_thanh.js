@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
 const LAM_NGOC_THANH_PRODUCTS = [
@@ -5,16 +7,25 @@ const LAM_NGOC_THANH_PRODUCTS = [
     id: "lam_ngoc_thanh_9999_24k",
     name: "Lâm Ngọc Thanh (Vàng 9999 24k)",
     label: "Vàng Lâm Ngọc Thanh 9999 24k",
+    aliases: ["Vàng Lâm Ngọc Thanh 9999 24k"],
   },
   {
     id: "lam_ngoc_thanh_nu_trang_999",
     name: "Lâm Ngọc Thanh (Nữ Trang 99.9% 24k)",
     label: "Nữ Trang Lâm Ngọc Thanh 99.9% 24k",
+    aliases: [
+      "Nữ Trang Lâm Ngọc Thanh 99.9% 24k",
+      "Nu Trang Lam Ngoc Thanh 99.9% 24k",
+    ],
   },
   {
     id: "lam_ngoc_thanh_nu_trang_97",
     name: "Lâm Ngọc Thanh (Vàng Nữ Trang 97)",
     label: "Vàng Nữ Trang 97 Lâm Ngọc Thanh",
+    aliases: [
+      "Vàng Nữ Trang 97 Lâm Ngọc Thanh",
+      "Vang Nu Trang 97 Lam Ngoc Thanh",
+    ],
   },
 ];
 
@@ -39,34 +50,48 @@ function parsePriceToken(raw) {
   return n;
 }
 
-function parseBuySellByLabel(payload, label) {
-  const text = stripHtmlToText(payload);
+function parseTableRows(payload) {
+  const $ = cheerio.load(String(payload || ""));
+  const rows = [];
+
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .find("th,td")
+      .map((__, cell) => $(cell).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+
+    if (cells.length < 3) return;
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
+    if (buy == null || sell == null) return;
+
+    rows.push({ label: cells[0], buy, sell });
+  });
+
+  return rows;
+}
+
+function isAliasMatch(label, aliases) {
   const normalizedLabel = normalizeText(label);
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeText(alias);
+    return (
+      normalizedLabel === normalizedAlias ||
+      normalizedLabel.includes(normalizedAlias) ||
+      normalizedAlias.includes(normalizedLabel)
+    );
+  });
+}
 
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.includes("|")) continue;
-    const cells = line.split("|").map((c) => c.trim());
-    const nameCell = cells.find((c) => normalizeText(c) === normalizedLabel);
-    if (!nameCell) continue;
-    const nameIdx = cells.indexOf(nameCell);
-    const buy = parsePriceToken(cells[nameIdx + 1] ?? "");
-    const sell = parsePriceToken(cells[nameIdx + 2] ?? "");
-    if (buy != null && sell != null) return { buy, sell };
-  }
+function parseBuySellByLabel(payload, product) {
+  const aliases = [product.label, ...(product.aliases ?? [])];
+  const rows = parseTableRows(payload);
 
-  // Fallback: regex on flattened normalized text
-  const escapedLabel = normalizedLabel
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/ /g, "\\s*");
-  const token = "(\\d[\\d.,]*)";
-  const m = normalizeText(text).match(
-    new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
-  );
-  if (m) {
-    const buy = parsePriceToken(m[1]);
-    const sell = parsePriceToken(m[2]);
-    if (buy != null && sell != null) return { buy, sell };
+  for (const row of rows) {
+    if (isAliasMatch(row.label, aliases)) {
+      return { buy: row.buy, sell: row.sell };
+    }
   }
 
   return { buy: null, sell: null };
@@ -84,19 +109,21 @@ function parseTime(payload) {
   return nowVnText();
 }
 
-export const LAM_NGOC_THANH_SOURCES = LAM_NGOC_THANH_PRODUCTS.map((product) => ({
-  id: product.id,
-  name: product.name,
-  storeName: "Tiệm Vàng Lâm Ngọc Thanh",
-  url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-lam-ngoc-thanh-hom-nay/",
-  webUrl: "https://giavangmaothiet.com/gia-vang-lam-ngoc-thanh-hom-nay/",
-  location: "Đồng Nai",
-  parse: (payload) => {
-    const { buy, sell } = parseBuySellByLabel(payload, product.label);
-    return {
-      buy,
-      sell,
-      lastUpdateText: parseTime(payload),
-    };
-  },
-}));
+export const LAM_NGOC_THANH_SOURCES = LAM_NGOC_THANH_PRODUCTS.map(
+  (product) => ({
+    id: product.id,
+    name: product.name,
+    storeName: "Tiệm Vàng Lâm Ngọc Thanh",
+    url: "https://giavangmaothiet.com/gia-vang-lam-ngoc-thanh-hom-nay/",
+    webUrl: "https://giavangmaothiet.com/gia-vang-lam-ngoc-thanh-hom-nay/",
+    location: "Đồng Nai",
+    parse: (payload) => {
+      const { buy, sell } = parseBuySellByLabel(payload, product);
+      return {
+        buy,
+        sell,
+        lastUpdateText: parseTime(payload),
+      };
+    },
+  }),
+);

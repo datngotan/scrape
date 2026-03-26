@@ -102,7 +102,7 @@ export const CHAT_VE_SILVER_SOURCES = CHAT_VE_SILVER_PRODUCTS.map((product) => (
   storeName: "Vàng Bạc Chất Vệ",
   location: "Tam Dương, Vĩnh Phúc",
   unit: product.unit,
-  url: "https://r.jina.ai/https://chatve.vn/gia-vang/",
+  url: "https://chatve.vn/gia-vang/",
   webUrl: "https://chatve.vn/gia-vang/",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);

@@ -74,7 +74,7 @@ function parseBuySellFromMarkdown(payload, label) {
       return direct;
     }
 
-    // Handle cases where r.jina.ai wraps one logical table row across lines.
+    // Handle cases where one logical table row is wrapped across lines.
     const combined = [line, lines[i + 1] ?? "", lines[i + 2] ?? ""]
       .filter((part) => part.includes("|"))
       .join(" ");
@@ -116,7 +116,7 @@ function parseBuySellByLabel(payload, label) {
     };
   }
 
-  // r.jina.ai may return markdown table lines like: | product | buy | sell |
+  // Some sources can return markdown table lines like: | product | buy | sell |
   const lines = html.split(/\r?\n/);
   for (const line of lines) {
     const upper = normalizeLabelText(line);
@@ -213,8 +213,14 @@ export const KIM_TIN_SOURCES = KIM_TIN_PRODUCTS.map((product) => ({
   name: product.name,
   storeName: "Kim Tin",
   unit: "luong",
-  url: "https://r.jina.ai/https://kimtin.com.vn",
+  url: "https://kimtin.com.vn",
   webUrl: "https://kimtin.com.vn",
+  fetchOptions: {
+    timeoutMs: 120_000,
+    waitMs: 4_000,
+    maxAttempts: 5,
+    waitUntil: "commit",
+  },
   location: "Hà Nội, Cao Bằng, Thái Nguyên",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);

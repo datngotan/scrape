@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
 const KIM_HANH_PRODUCTS = [
@@ -59,34 +61,36 @@ function parsePriceToken(raw) {
   return n;
 }
 
+function parseTableRows(payload) {
+  const $ = cheerio.load(String(payload || ""));
+  const rows = [];
+
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .find("th,td")
+      .map((__, cell) => $(cell).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+
+    if (cells.length < 3) return;
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
+    if (buy == null || sell == null) return;
+
+    rows.push({ label: cells[0], buy, sell });
+  });
+
+  return rows;
+}
+
 function parseBuySellByLabel(payload, label) {
-  const text = stripHtmlToText(payload);
   const normalizedLabel = normalizeText(label);
-  const token = "(\\d[\\d.,]*)";
 
-  // Walk pipe-table lines, normalize cell content for comparison
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.includes("|")) continue;
-    const cells = line.split("|").map((c) => c.trim());
-    // cells[0] may be empty (leading |), cells[1] = product, cells[2] = buy, cells[3] = sell
-    const nameCell = cells.find((c) => normalizeText(c) === normalizedLabel);
-    if (!nameCell) continue;
-    const nameIdx = cells.indexOf(nameCell);
-    const buy = parsePriceToken(cells[nameIdx + 1] ?? "");
-    const sell = parsePriceToken(cells[nameIdx + 2] ?? "");
-    if (buy != null && sell != null) return { buy, sell };
-  }
-
-  // Fallback: regex on flattened text
-  const escapedLabel = normalizedLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s*");
-  const m = normalizeText(text).match(
-    new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
-  );
-  if (m) {
-    const buy = parsePriceToken(m[1]);
-    const sell = parsePriceToken(m[2]);
-    if (buy != null && sell != null) return { buy, sell };
+  const rows = parseTableRows(payload);
+  for (const row of rows) {
+    if (normalizeText(row.label) === normalizedLabel) {
+      return { buy: row.buy, sell: row.sell };
+    }
   }
 
   return { buy: null, sell: null };
@@ -115,7 +119,7 @@ export const KIM_HANH_SOURCES = KIM_HANH_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
   storeName: "Vàng Kim Hạnh",
-  url: "https://r.jina.ai/https://vangkimhanh.com/",
+  url: "https://vangkimhanh.com/",
   webUrl: "https://vangkimhanh.com/",
   location: "TP.HCM",
   parse: (payload) => {

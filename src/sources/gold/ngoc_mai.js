@@ -2,7 +2,7 @@ import { stripHtmlToText } from "../../utils.js";
 
 const NGOC_MAI_WEB_URL = "https://ngocmaigold.com/gia-vang";
 const NGOC_MAI_CANVA_URL =
-  "https://r.jina.ai/http://www.canva.com/design/DAHDJTFk6U8/t1PZsBcBRsZ6zyj-eEsIGg/view?embed";
+  "http://www.canva.com/design/DAHDJTFk6U8/t1PZsBcBRsZ6zyj-eEsIGg/view?embed";
 
 const PRODUCTS = [
   {
@@ -14,6 +14,16 @@ const PRODUCTS = [
     id: "ngoc_mai_trang_suc_9999",
     name: "Ngọc Mai (Trang sức 9999)",
     label: "TRANG SỨC 9999",
+  },
+  {
+    id: "ngoc_mai_trang_suc_985_980",
+    name: "Ngọc Mai (Trang sức 985/980)",
+    label: "TRANG SỨC 985/980",
+  },
+  {
+    id: "ngoc_mai_trang_suc_610",
+    name: "Ngọc Mai (Trang sức 610)",
+    label: "TRANG SỨC 610",
   },
 ];
 
@@ -33,15 +43,23 @@ function parseUpdateText(payload) {
 
 function parseByLabel(payload, label) {
   const text = stripHtmlToText(payload);
-  const labelsInOrder = ["VÀNG NHẪN 990", "TRANG SỨC 9999"];
+  const labelsInOrder = [
+    "VÀNG NHẪN 990",
+    "TRANG SỨC 9999",
+    "TRANG SỨC 985/980",
+    "TRANG SỨC 610",
+  ];
   const normalized = text.toUpperCase();
-  const sectionStart = normalized.indexOf("BẢNG GIÁ VÀNG");
+  const sectionStartRaw = normalized.indexOf("BẢNG GIÁ VÀNG");
+  const sectionStart =
+    sectionStartRaw >= 0 ? sectionStartRaw : normalized.indexOf("LOẠI VÀNG");
   const sectionEndRaw = normalized.indexOf("LƯU Ý");
   const sectionEnd =
     sectionEndRaw > sectionStart
       ? sectionEndRaw
       : Math.min(text.length, sectionStart + 2000);
-  const section = sectionStart >= 0 ? text.slice(sectionStart, sectionEnd) : text;
+  const section =
+    sectionStart >= 0 ? text.slice(sectionStart, sectionEnd) : text;
 
   const labelIndex = labelsInOrder.indexOf(label);
   if (labelIndex < 0) return { buy: null, sell: null };

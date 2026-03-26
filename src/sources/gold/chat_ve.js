@@ -121,7 +121,7 @@ export const CHAT_VE_GOLD_SOURCES = CHAT_VE_GOLD_PRODUCTS.map((product) => ({
   storeName: "Vàng Bạc Chất Vệ",
   location: "Tam Dương, Vĩnh Phúc",
   unit: "chi",
-  url: "https://r.jina.ai/https://chatve.vn/gia-vang/",
+  url: "https://chatve.vn/gia-vang/",
   webUrl: "https://chatve.vn/gia-vang/",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.label);

@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
 const DAI_NGHIA_PRODUCTS = [
@@ -64,16 +66,56 @@ function parseBuySellFromPipeLine(line) {
   return { buy, sell };
 }
 
+function parseTableRows(payload) {
+  const $ = cheerio.load(String(payload || ""));
+  const rows = [];
+
+  $("table.goldbox-table tbody tr, table tbody tr, tr").each((_, tr) => {
+    const cells = $(tr)
+      .find("th,td")
+      .map((__, cell) => $(cell).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+
+    if (cells.length < 3) return;
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
+    if (buy == null || sell == null) return;
+
+    rows.push({ label: cells[0], buy, sell });
+  });
+
+  return rows;
+}
+
 function parseBuySellByLabel(payload, labels) {
   const normalizedLabels = labels.map((label) => normalizeText(label));
   const raw = String(payload || "");
+
+  // Primary: parse structured table cells from direct HTML.
+  const tableRows = parseTableRows(raw);
+  for (const row of tableRows) {
+    const normalizedRowLabel = normalizeText(row.label);
+    if (
+      normalizedLabels.some((normalizedLabel) =>
+        normalizedRowLabel.includes(normalizedLabel),
+      )
+    ) {
+      return { buy: row.buy, sell: row.sell };
+    }
+  }
+
   const lines = raw.split(/\r?\n/);
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (!line.includes("|")) continue;
     const normalizedLine = normalizeText(line);
-    if (!normalizedLabels.some((normalizedLabel) => normalizedLine.includes(normalizedLabel))) {
+    if (
+      !normalizedLabels.some((normalizedLabel) =>
+        normalizedLine.includes(normalizedLabel),
+      )
+    ) {
       continue;
     }
 
@@ -88,21 +130,22 @@ function parseBuySellByLabel(payload, labels) {
   }
 
   const text = stripHtmlToText(raw);
-  const token = "(\\d[\\d.,]*)";
-  const normalizedText = normalizeText(text);
+  const plainLines = text.split(/\r?\n/);
+  for (const line of plainLines) {
+    const normalizedLine = normalizeText(line);
+    if (
+      !normalizedLabels.some((normalizedLabel) =>
+        normalizedLine.includes(normalizedLabel),
+      )
+    ) {
+      continue;
+    }
 
-  for (const normalizedLabel of normalizedLabels) {
-    const escapedLabel = normalizedLabel
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/ /g, "\\s*");
-    const m = normalizedText.match(
-      new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
-    );
-    if (!m) continue;
-
-    const buy = parsePriceToken(m[1]);
-    const sell = parsePriceToken(m[2]);
-    return { buy, sell };
+    const tokens = line.match(/\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,6}/g) ?? [];
+    const prices = tokens.map(parsePriceToken).filter((n) => n != null);
+    if (prices.length >= 2) {
+      return { buy: prices[0], sell: prices[1] };
+    }
   }
 
   return { buy: null, sell: null };
@@ -111,7 +154,9 @@ function parseBuySellByLabel(payload, labels) {
 function parseTime(payload) {
   const text = stripHtmlToText(payload);
 
-  let m = text.match(/Cập nhật lúc:\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/i);
+  let m = text.match(
+    /Cập nhật lúc:\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/i,
+  );
   if (m) {
     return `${m[4]}:${m[5]}:${m[6]} ${m[3]}/${m[2]}/${m[1]}`;
   }
@@ -130,7 +175,7 @@ export const DAI_NGHIA_SOURCES = DAI_NGHIA_PRODUCTS.map((product) => ({
   storeName: "Vàng Bạc Đại Nghĩa",
   location: "Nam Định",
   unit: "chi",
-  url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
+  url: "https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
   webUrl: "https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.labels);

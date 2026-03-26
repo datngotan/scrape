@@ -1,10 +1,12 @@
+import * as cheerio from "cheerio";
+
 import {
   parseSilverLastUpdateText,
   parseSilverPriceToThousand,
 } from "../../utils.js";
 
 const HUONG_CHI_WEB_URL = "http://vanghuongchi.com.vn/";
-const HUONG_CHI_JINA_URL = "https://r.jina.ai/http://vanghuongchi.com.vn/";
+const HUONG_CHI_SOURCE_URL = "http://vanghuongchi.com.vn/";
 
 const PRODUCTS = [
   {
@@ -22,7 +24,9 @@ const PRODUCTS = [
 ];
 
 function normalizeSpaces(input) {
-  return String(input || "").replace(/\s+/g, " ").trim();
+  return String(input || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function escapeReg(input) {
@@ -47,17 +51,40 @@ function parseTime(payload) {
 }
 
 function parseByNeedle(payload, needle, unit) {
-  const text = normalizeSpaces(payload);
-  const escaped = escapeReg(needle);
+  const normalizedNeedle = normalizeSpaces(needle).toLowerCase();
+  let buy = null;
+  let sell = null;
 
-  const rowRe = new RegExp(
-    `(?:\\*\\*)?\\s*${escaped}\\s*(?:\\*\\*)?\\s*([\\d.,]+)\\s+([\\d.,]+)`,
-    "i",
-  );
-  const m = text.match(rowRe);
+  const $ = cheerio.load(String(payload || ""));
+  $("tr").each((_, tr) => {
+    if (buy != null && sell != null) return;
 
-  const buy = m ? parseSilverPriceToThousand(m[1]) : null;
-  const sell = m ? parseSilverPriceToThousand(m[2]) : null;
+    const cells = $(tr)
+      .find("th,td")
+      .map((__, cell) => $(cell).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+
+    if (cells.length < 3) return;
+    const rowName = normalizeSpaces(cells[0]).toLowerCase();
+    if (!rowName.includes(normalizedNeedle)) return;
+
+    buy = parseSilverPriceToThousand(cells[1]);
+    sell = parseSilverPriceToThousand(cells[2]);
+  });
+
+  if (buy == null || sell == null) {
+    const text = normalizeSpaces(payload);
+    const escaped = escapeReg(needle);
+    const rowRe = new RegExp(
+      `(?:\\*\\*)?\\s*${escaped}\\s*(?:\\*\\*)?\\s*([\\d.,]+)\\s+([\\d.,]+)`,
+      "i",
+    );
+    const m = text.match(rowRe);
+
+    buy = m ? parseSilverPriceToThousand(m[1]) : null;
+    sell = m ? parseSilverPriceToThousand(m[2]) : null;
+  }
 
   return {
     buy,
@@ -70,7 +97,7 @@ function parseByNeedle(payload, needle, unit) {
 const SHARED = {
   storeName: "Vàng Hương Chi",
   location: "Bắc Ninh",
-  url: HUONG_CHI_JINA_URL,
+  url: HUONG_CHI_SOURCE_URL,
   webUrl: HUONG_CHI_WEB_URL,
 };
 

@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
 const VIET_A_GOLD_PRODUCTS = [
@@ -38,40 +40,40 @@ function parsePriceToken(raw) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function convertPriceForStorage(rawPrice) {
+  if (rawPrice == null) return null;
+  return Math.round(rawPrice / 10);
+}
+
 function parseBuySellByLabel(payload, label) {
   const normalizedLabel = normalizeText(label);
-  const raw = String(payload || "");
 
-  // Parse per raw line so numeric separators (.,) are preserved.
-  const lines = raw.split(/\r?\n/);
-  for (const line of lines) {
-    if (!normalizeText(line).includes(normalizedLabel)) continue;
+  const $ = cheerio.load(String(payload || ""));
+  let matched = { buy: null, sell: null };
 
-    const nums = (line.match(/\d{1,3}(?:[.,]\d{3})+|\d{4,6}/g) ?? []).map(
-      parsePriceToken,
-    );
-    const filtered = nums.filter((x) => x != null);
-    if (filtered.length >= 2) {
-      return {
-        buy: filtered[0] / 10,
-        sell: filtered[1] / 10,
-      };
+  $("tr").each((_, tr) => {
+    if (matched.buy != null && matched.sell != null) return;
+
+    const cells = $(tr)
+      .find("th,td")
+      .map((__, cell) => $(cell).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+    if (cells.length < 3) return;
+
+    if (!normalizeText(cells[0]).includes(normalizedLabel)) return;
+
+    const buyRaw = parsePriceToken(cells[1]);
+    const sellRaw = parsePriceToken(cells[2]);
+    const buy = convertPriceForStorage(buyRaw);
+    const sell = convertPriceForStorage(sellRaw);
+    if (buy != null && sell != null) {
+      matched = { buy, sell };
     }
-  }
+  });
 
-  // Fallback for flattened output.
-  const text = stripHtmlToText(payload);
-  if (normalizeText(text).includes(normalizedLabel)) {
-    const nums = (text.match(/\d{1,3}(?:[.,]\d{3})+|\d{4,6}/g) ?? []).map(
-      parsePriceToken,
-    );
-    const filtered = nums.filter((x) => x != null);
-    if (filtered.length >= 2) {
-      return {
-        buy: filtered[0] / 10,
-        sell: filtered[1]/ 10,
-      };
-    }
+  if (matched.buy != null && matched.sell != null) {
+    return matched;
   }
 
   return { buy: null, sell: null };
@@ -93,7 +95,8 @@ function parseTime(payload) {
     const mi = t[2];
     const period = normalizeText(t[3] || "");
 
-    if ((period.includes("CHIEU") || period.includes("TOI")) && hh < 12) hh += 12;
+    if ((period.includes("CHIEU") || period.includes("TOI")) && hh < 12)
+      hh += 12;
     if (period.includes("SANG") && hh === 12) hh = 0;
 
     const HH = String(hh).padStart(2, "0");
@@ -108,7 +111,7 @@ export const VIET_A_GOLD_SOURCES = VIET_A_GOLD_PRODUCTS.map((product) => ({
   name: product.name,
   storeName: "VIETAGOLD",
   unit: "chi",
-  url: "https://r.jina.ai/https://vietagold.com.vn/gia-vang/",
+  url: "https://vietagold.com.vn/gia-vang/",
   webUrl: "https://vietagold.com.vn/gia-vang/",
   location: "Hà Nội",
   parse: (payload) => {

@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
 const PHUC_NHU_PRODUCTS = [
@@ -51,46 +53,36 @@ function parsePriceToken(raw) {
   return n;
 }
 
+function parseTableRows(payload) {
+  const $ = cheerio.load(String(payload || ""));
+  const rows = [];
+
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .find("th,td")
+      .map((__, cell) => $(cell).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+
+    if (cells.length < 3) return;
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
+    if (buy == null || sell == null) return;
+
+    rows.push({ label: cells[0], buy, sell });
+  });
+
+  return rows;
+}
+
 function parseBuySellByLabel(payload, label) {
-  const raw = String(payload || "");
-  const text = stripHtmlToText(payload);
   const normalizedLabel = normalizeText(label);
 
-  const lines = raw.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (!line.includes("|")) continue;
-
-    // r.jina.ai may split a logical row across multiple lines.
-    const merged = [line, lines[i + 1] ?? "", lines[i + 2] ?? ""]
-      .filter((part) => part.includes("|"))
-      .join(" ");
-
-    const cells = merged
-      .split("|")
-      .map((cell) => cell.trim())
-      .filter(Boolean);
-    if (cells.length < 3) continue;
-
-    const idx = cells.findIndex((cell) => normalizeText(cell) === normalizedLabel);
-    if (idx < 0) continue;
-
-    const buy = parsePriceToken(cells[idx + 1] ?? "");
-    const sell = parsePriceToken(cells[idx + 2] ?? "");
-    if (buy != null && sell != null) return { buy, sell };
-  }
-
-  const escapedLabel = normalizedLabel
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/ /g, "\\s*");
-  const token = "(\\d[\\d.,]*)";
-  const m = normalizeText(text).match(
-    new RegExp(`${escapedLabel}\\s+${token}\\s+${token}`, "i"),
-  );
-  if (m) {
-    const buy = parsePriceToken(m[1]);
-    const sell = parsePriceToken(m[2]);
-    if (buy != null && sell != null) return { buy, sell };
+  const rows = parseTableRows(payload);
+  for (const row of rows) {
+    if (normalizeText(row.label) === normalizedLabel) {
+      return { buy: row.buy, sell: row.sell };
+    }
   }
 
   return { buy: null, sell: null };
@@ -113,7 +105,7 @@ export const PHUC_NHU_SOURCES = PHUC_NHU_PRODUCTS.map((product) => ({
   name: product.name,
   storeName: "Vàng Phúc Nhu",
   unit: "luong",
-  url: "https://r.jina.ai/https://giavangmaothiet.com/gia-vang-phuc-nhu-hom-nay/",
+  url: "https://giavangmaothiet.com/gia-vang-phuc-nhu-hom-nay/",
   webUrl: "https://giavangmaothiet.com/gia-vang-phuc-nhu-hom-nay/",
   location: "Hải Phòng",
   parse: (payload) => {
