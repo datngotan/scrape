@@ -1,4 +1,4 @@
-name: Scrape Prices
+name: Self Scrape Prices
 
 concurrency:
   group: scrape-prices
@@ -17,7 +17,8 @@ on:
 
 jobs:
   scrape:
-    runs-on: MSI
+    runs-on: self-hosted
+
     timeout-minutes: 25
 
     steps:
