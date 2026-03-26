@@ -217,7 +217,7 @@ export const KIM_TIN_SOURCES = KIM_TIN_PRODUCTS.map((product) => ({
   webUrl: "https://kimtin.com.vn",
   fetchOptions: {
     timeoutMs: 120_000,
-    waitMs: 4_000,
+    waitMs: 8_000,
     maxAttempts: 5,
     waitUntil: "commit",
   },

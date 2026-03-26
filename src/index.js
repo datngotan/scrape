@@ -58,34 +58,12 @@ function normalizeUrlForCache(rawUrl) {
 }
 
 async function processSource(source, getSharedPayload) {
-  const DEFAULT_TIMEOUT_MS = 100_000;
-  const fetchTimeoutMs = Number.isFinite(source?.fetchOptions?.timeoutMs)
-    ? source.fetchOptions.timeoutMs
-    : 60_000;
-  const fetchWaitMs = Number.isFinite(source?.fetchOptions?.waitMs)
-    ? source.fetchOptions.waitMs
-    : 2_500;
-  const fetchAttempts = Number.isFinite(source?.fetchOptions?.maxAttempts)
-    ? source.fetchOptions.maxAttempts
-    : 3;
-
-  // Allow the runner timeout to cover fetch retries plus parser/build overhead.
-  const estimatedFetchBudgetMs =
-    fetchAttempts * (fetchTimeoutMs + fetchWaitMs) + 15_000;
-  const timeoutMs = Math.min(
-    10 * 60_000,
-    Math.max(DEFAULT_TIMEOUT_MS, estimatedFetchBudgetMs),
-  );
+  const TIMEOUT_MS = 100_000;
 
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(
-      () =>
-        reject(
-          new Error(
-            `Processing timeout after ${Math.round(timeoutMs / 1000)}s`,
-          ),
-        ),
-      timeoutMs,
+      () => reject(new Error("Processing timeout after 100s")),
+      TIMEOUT_MS,
     ),
   );
 

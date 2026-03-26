@@ -3,11 +3,13 @@ const CHIEN_MINH_PRODUCTS = [
     id: "chien_minh_nhan_cm_9999",
     name: "Chiến Minh (Vàng nhẫn CM 99.99)",
     label: "VÀNG NHẪN CM 99.99",
+    aliases: ["VÀNG NHẪN CM 99.99", "VANG NHAN CM 99.99", "NHAN CM 99.99"],
   },
   {
     id: "chien_minh_vang_cm_9999",
     name: "Chiến Minh (Vàng CM 99.99)",
     label: "VÀNG CM 99.99",
+    aliases: ["VÀNG CM 99.99", "VANG CM 99.99", "CM 99.99"],
   },
 ];
 
@@ -63,6 +65,37 @@ function toNumber(raw) {
 
   const n = Number(digits);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function isAliasMatch(label, aliases) {
+  const normalizedLabel = normalizeText(label);
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeText(alias);
+    return (
+      normalizedLabel === normalizedAlias ||
+      normalizedLabel.includes(normalizedAlias) ||
+      normalizedAlias.includes(normalizedLabel)
+    );
+  });
+}
+
+function isProductIdMatch(label, productId) {
+  const normalizedLabel = normalizeText(label);
+  if (!normalizedLabel) return false;
+
+  if (productId === "chien_minh_nhan_cm_9999") {
+    return (
+      normalizedLabel.includes("nhan cm") && normalizedLabel.includes("99 99")
+    );
+  }
+
+  if (productId === "chien_minh_vang_cm_9999") {
+    return (
+      normalizedLabel.includes("vang cm") && normalizedLabel.includes("99 99")
+    );
+  }
+
+  return false;
 }
 
 function nowVnText() {
@@ -131,8 +164,9 @@ function parseTime(payload) {
   return `${HH}:${MI}:${SS} ${dd}/${mm}/${yyyy}`;
 }
 
-function parseBuySellByLabel(payload, label) {
-  const target = normalizeText(label);
+function parseBuySellByLabel(payload, product) {
+  const aliases = [product.label, ...(product.aliases ?? [])];
+  const target = normalizeText(product.label);
   const raw = String(payload || "");
 
   const lines = raw.split(/\r?\n/);
@@ -155,7 +189,14 @@ function parseBuySellByLabel(payload, label) {
   const rows = raw.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
   for (const row of rows) {
     const rowText = stripTags(row);
-    if (!normalizeText(rowText).includes(target)) continue;
+    const normalizedRowText = normalizeText(rowText);
+    if (
+      !isAliasMatch(rowText, aliases) &&
+      !normalizedRowText.includes(target) &&
+      !isProductIdMatch(rowText, product.id)
+    ) {
+      continue;
+    }
 
     const cells = row.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) ?? [];
     if (cells.length >= 4) {
@@ -175,7 +216,7 @@ function parseBuySellByLabel(payload, label) {
   }
 
   const text = stripTags(raw);
-  const escaped = label
+  const escaped = product.label
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace(/\s+/g, "\\s*");
   const re = new RegExp(
@@ -200,12 +241,13 @@ export const CHIEN_MINH_SOURCES = CHIEN_MINH_PRODUCTS.map((product) => ({
   webUrl: "https://www.vangchienminh.vn/",
   fetchOptions: {
     timeoutMs: 90_000,
-    waitMs: 3_500,
-    maxAttempts: 5,
+    waitMs: 8_000,
+    maxAttempts: 6,
+    waitUntil: "commit",
   },
   location: "Hà Nội",
   parse: (payload) => {
-    const row = parseBuySellByLabel(payload, product.label);
+    const row = parseBuySellByLabel(payload, product);
     const lastUpdateText = parseTime(payload) || nowVnText();
     return {
       buy: row.buy,
