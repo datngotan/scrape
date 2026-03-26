@@ -16,7 +16,10 @@ function decodeHtml(input) {
 
   if (typeof DOMParser !== "undefined") {
     try {
-      const doc = new DOMParser().parseFromString(`<body>${s}</body>`, "text/html");
+      const doc = new DOMParser().parseFromString(
+        `<body>${s}</body>`,
+        "text/html",
+      );
       const text = doc?.body?.textContent;
       if (text) return text.replace(/\s+/g, " ").trim();
     } catch {
@@ -26,7 +29,9 @@ function decodeHtml(input) {
 
   return s
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) =>
+      String.fromCodePoint(parseInt(hex, 16)),
+    )
     .replace(/&nbsp;|&#160;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
@@ -88,7 +93,9 @@ function nowVnText() {
 function parseTime(payload) {
   const text = stripTags(payload);
 
-  let m = text.match(/Ngày\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*\|\s*(\d{1,2}):(\d{2}):(\d{2})/i);
+  let m = text.match(
+    /Ngày\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*\|\s*(\d{1,2}):(\d{2}):(\d{2})/i,
+  );
   if (m) {
     const dd = m[1].padStart(2, "0");
     const mm = m[2].padStart(2, "0");
@@ -110,7 +117,9 @@ function parseTime(payload) {
     return `${HH}:${MI}:${SS} ${dd}/${mm}/${yyyy}`;
   }
 
-  m = text.match(/Ngày\s*(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/i);
+  m = text.match(
+    /Ngày\s*(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/i,
+  );
   if (!m) return "";
 
   const dd = m[1].padStart(2, "0");
@@ -166,7 +175,9 @@ function parseBuySellByLabel(payload, label) {
   }
 
   const text = stripTags(raw);
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+  const escaped = label
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s*");
   const re = new RegExp(
     `${escaped}[\\s\\S]{0,120}?(\\d{1,3}(?:[.,]\\d{3})*)[\\s\\S]{0,40}?(\\d{1,3}(?:[.,]\\d{3})*)`,
     "i",
@@ -187,6 +198,11 @@ export const CHIEN_MINH_SOURCES = CHIEN_MINH_PRODUCTS.map((product) => ({
   unit: "luong",
   url: "https://www.vangchienminh.vn/",
   webUrl: "https://www.vangchienminh.vn/",
+  fetchOptions: {
+    timeoutMs: 90_000,
+    waitMs: 3_500,
+    maxAttempts: 5,
+  },
   location: "Hà Nội",
   parse: (payload) => {
     const row = parseBuySellByLabel(payload, product.label);
