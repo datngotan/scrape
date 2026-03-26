@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { runScrapeJob } from "./src/index.js";
 
 async function main() {
