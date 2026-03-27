@@ -30,7 +30,44 @@ function normalizeText(input) {
     .replace(/\s+/g, " ");
 }
 
+function parseBuySellFromAjaxJson(payload, label) {
+  const rawPayload = String(payload || "");
+  const textPayload = stripHtmlToText(rawPayload);
+  const jsonTextCandidates = [rawPayload, textPayload];
+
+  const embeddedMatch = rawPayload.match(/\{[\s\S]*\}/);
+  if (embeddedMatch?.[0]) jsonTextCandidates.push(embeddedMatch[0]);
+
+  let parsedJson = null;
+  for (const candidate of jsonTextCandidates) {
+    try {
+      parsedJson = JSON.parse(candidate);
+      break;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  if (!parsedJson) return null;
+
+  const rows = Array.isArray(parsedJson?.data) ? parsedJson.data : [];
+  const normalizedLabel = normalizeText(label);
+
+  for (const row of rows) {
+    if (normalizeText(row?.name) !== normalizedLabel) continue;
+
+    const buy = parseSilverPriceToThousand(row?.buy);
+    const sell = parseSilverPriceToThousand(row?.sell);
+    if (buy != null && sell != null) return { buy, sell };
+  }
+
+  return { buy: null, sell: null };
+}
+
 function parseBuySellByLabel(payload, label) {
+  const ajaxJsonResult = parseBuySellFromAjaxJson(payload, label);
+  if (ajaxJsonResult) return ajaxJsonResult;
+
   const rowMatches = String(payload || "").match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
   const normalizedLabel = normalizeText(label);
 
@@ -110,7 +147,7 @@ export const ANH_MINH_SILVER_SOURCES = ANH_MINH_SILVER_PRODUCTS.map(
     id: product.id,
     name: product.name,
     storeName: "Vàng Anh Minh",
-    url: "https://vanganhminh.com/",
+    url: "https://vanganhminh.com/wp-admin/admin-ajax.php?action=get_gold_price",
     webUrl: "https://vanganhminh.com/",
     location: "Hà Nội",
     unit: product.unit,
