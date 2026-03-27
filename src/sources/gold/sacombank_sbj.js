@@ -201,8 +201,8 @@ async function ocrBoard(payload) {
     }
 
     // Fallback: OCR can split product and prices into separate lines.
-    // In that case, take ordered price pairs (row 1..10) from a second OCR pass.
-    await worker.setParameters({ tessedit_pageseg_mode: "12" });
+    // In that case, take ordered price pairs (row 1..10) from sparse text mode without OSD.
+    await worker.setParameters({ tessedit_pageseg_mode: "11" });
     const { data: dataPsm12 } = await worker.recognize(preprocessed);
     const orderedRows = extractOrderedRowsFromText(
       String(dataPsm12.text || ""),

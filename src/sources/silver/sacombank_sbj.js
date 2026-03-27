@@ -9,7 +9,7 @@ const SACOMBANK_SBJ_SILVER_PRODUCTS = [
     id: "sacombank_sbj_bac_thoi_999_1_luong",
     name: "Sacombank-SBJ (Bạc kim phúc lộc)",
     rowNo: 1,
-    keywords: ["luong"],
+    keywords: ["kim phuc loc", "1l"],
     unit: "luong",
   },
   {
@@ -92,74 +92,162 @@ function parseLastUpdateText(payload, ocrText, imageMeta) {
   return `00:00:00 ${dd}/${mm}/${yyyy}`;
 }
 
+function addRow(rowsByNumber, rowNo, buy, sell, text) {
+  if (!Number.isFinite(rowNo)) return;
+  if (buy == null || sell == null) return;
+
+  rowsByNumber.set(rowNo, {
+    rowNo,
+    text: normalizeText(text),
+    buy,
+    sell,
+  });
+}
+
+function extractRowsByProductHints(lines) {
+  const rowsByNumber = new Map();
+  const candidates = [];
+  const pricePattern = /\d{1,3}(?:[.,]\d{3}){1,2}/g;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prices = line.match(pricePattern) ?? [];
+    if (prices.length < 2) continue;
+
+    const buy = parseSilverPriceToThousand(prices[0]);
+    const sell = parseSilverPriceToThousand(prices[1]);
+    if (buy == null || sell == null) continue;
+
+    const context = normalizeText(
+      [lines[i - 2], lines[i - 1], lines[i], lines[i + 1]]
+        .filter(Boolean)
+        .join(" "),
+    );
+
+    let rowNo = null;
+    if (/\bmy nghe\b|limited edition/.test(context)) {
+      rowNo = 3;
+    } else if (/\bkg\b|vnd kg|1\s*kg/.test(context)) {
+      rowNo = 2;
+    } else if (/kim phuc loc|phuc loc|\b1l\b|\b10l\b|\b50l\b/.test(context)) {
+      rowNo = 1;
+    }
+
+    candidates.push({ rowNo, buy, sell, text: context, index: i });
+    if (rowNo != null && !rowsByNumber.has(rowNo)) {
+      addRow(rowsByNumber, rowNo, buy, sell, context);
+    }
+  }
+
+  // Fallback by value shape/order if OCR misses row labels.
+  if (!rowsByNumber.has(2) && candidates.length > 0) {
+    const kgCandidate = [...candidates].sort((a, b) => b.buy - a.buy)[0];
+    if (kgCandidate?.buy > 10_000) {
+      addRow(
+        rowsByNumber,
+        2,
+        kgCandidate.buy,
+        kgCandidate.sell,
+        kgCandidate.text,
+      );
+    }
+  }
+
+  if (!rowsByNumber.has(3)) {
+    const myNgheCandidate = candidates.find((c) =>
+      /\bmy nghe\b|limited edition/.test(c.text),
+    );
+    if (myNgheCandidate) {
+      addRow(
+        rowsByNumber,
+        3,
+        myNgheCandidate.buy,
+        myNgheCandidate.sell,
+        myNgheCandidate.text,
+      );
+    }
+  }
+
+  if (!rowsByNumber.has(1)) {
+    const row1Candidate = candidates.find((c) =>
+      /kim phuc loc|phuc loc|\b1l\b|\b10l\b|\b50l\b/.test(c.text),
+    );
+    if (row1Candidate) {
+      addRow(
+        rowsByNumber,
+        1,
+        row1Candidate.buy,
+        row1Candidate.sell,
+        row1Candidate.text,
+      );
+    }
+  }
+
+  return rowsByNumber;
+}
+
 function extractRowsFromSparseText(text) {
   const lines = String(text || "")
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const priceOnlyRe = /^\d{1,3}(?:[.,]\d{3}){1,2}$/;
+  const detectRowNo = (norm) => {
+    if (/\bmy\s*ngh\w*\b|limited edition/.test(norm)) return 3;
+    if (/\bkg\b|1\s*kg/.test(norm)) return 2;
+    if (/kim\s*phuc|phuc\s*loc|phuc\s*lec/.test(norm)) return 1;
+    return null;
+  };
 
-  // Classify each line as price, product-name, or other.
-  const elements = [];
-  for (const line of lines) {
-    if (priceOnlyRe.test(line.replace(/\s+/g, ""))) {
-      const val = parseSilverPriceToThousand(line);
-      if (val != null) {
-        elements.push({ type: "price", value: val });
-        continue;
-      }
+  const rowsByNumber = new Map();
+  const rows = [];
+  const buckets = new Map();
+  let currentRowNo = null;
+
+  const ensureBucket = (rowNo) => {
+    if (!buckets.has(rowNo)) {
+      buckets.set(rowNo, { text: "", prices: [] });
     }
+    return buckets.get(rowNo);
+  };
+
+  for (const line of lines) {
     const norm = normalizeText(line);
-    if (norm.length > 8 && /\bbac\b|\bsbj\b/.test(norm)) {
-      elements.push({ type: "product", text: norm });
-    } else {
-      elements.push({ type: "other", text: norm });
+    if (!norm) continue;
+
+    const detectedRowNo = detectRowNo(norm);
+    if (detectedRowNo != null) {
+      currentRowNo = detectedRowNo;
+      const bucket = ensureBucket(detectedRowNo);
+      bucket.text = bucket.text ? `${bucket.text} ${norm}` : norm;
+    } else if (currentRowNo != null && /vnd|luong|kg/.test(norm)) {
+      const bucket = ensureBucket(currentRowNo);
+      bucket.text = bucket.text ? `${bucket.text} ${norm}` : norm;
+    }
+
+    if (currentRowNo != null) {
+      const prices = line.match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [];
+      const bucket = ensureBucket(currentRowNo);
+      for (const raw of prices) {
+        const val = parseSilverPriceToThousand(raw);
+        if (val != null) bucket.prices.push(val);
+      }
     }
   }
 
-  // For each product, collect nearest prices (prefer forward, fallback backward).
-  const rowsByNumber = new Map();
-  const rows = [];
-  let rowNo = 0;
-
-  for (let i = 0; i < elements.length; i++) {
-    if (elements[i].type !== "product") continue;
-    rowNo += 1;
-
-    const forwardPrices = [];
-    for (let j = i + 1; j < elements.length; j++) {
-      if (elements[j].type === "product") break;
-      if (elements[j].type === "price") forwardPrices.push(elements[j].value);
-    }
-
-    let prices = forwardPrices;
-    if (prices.length === 0) {
-      const backwardPrices = [];
-      for (let j = i - 1; j >= 0; j--) {
-        if (elements[j].type === "product") break;
-        if (elements[j].type === "price")
-          backwardPrices.unshift(elements[j].value);
-      }
-      prices = backwardPrices;
-    }
-
-    // Include next non-price line for context (unit text like VND/kg).
-    let fullText = elements[i].text;
-    if (i + 1 < elements.length && elements[i + 1].type === "other") {
-      fullText += " " + elements[i + 1].text;
-    }
+  for (const rowNo of [1, 2, 3]) {
+    const bucket = buckets.get(rowNo);
+    if (!bucket || bucket.prices.length < 2) continue;
 
     const row = {
       rowNo,
-      text: fullText,
-      buy: prices[0] ?? null,
-      sell: prices[1] ?? null,
+      text: bucket.text,
+      buy: bucket.prices[0],
+      sell: bucket.prices[1],
     };
-    if (row.buy != null) {
-      rowsByNumber.set(rowNo, row);
-      rows.push(row);
-    }
+
+    rowsByNumber.set(rowNo, row);
+    rows.push(row);
   }
 
   return { rowsByNumber, rows };
@@ -231,9 +319,14 @@ async function ocrBoard(payload) {
       rows.push(row);
     }
 
+    const hintedRows = extractRowsByProductHints(lines);
+    for (const [rowNo, row] of hintedRows.entries()) {
+      if (!rowsByNumber.has(rowNo)) rowsByNumber.set(rowNo, row);
+    }
+
     // Fallback: OCR can split product and prices into separate lines.
-    // Use a product-name-aware parser on a second OCR pass (sparse text mode).
-    await worker.setParameters({ tessedit_pageseg_mode: "12" });
+    // Use sparse text mode without OSD to avoid requiring osd.traineddata.
+    await worker.setParameters({ tessedit_pageseg_mode: "11" });
     const { data: dataPsm12 } = await worker.recognize(preprocessed);
     const sparse = extractRowsFromSparseText(String(dataPsm12.text || ""));
     for (const [rowNo, row] of sparse.rowsByNumber.entries()) {
@@ -255,9 +348,17 @@ async function ocrBoard(payload) {
 
 function includesAllKeywords(text, keywords) {
   const normalized = normalizeText(text);
-  return keywords.every((keyword) =>
-    normalized.includes(normalizeText(keyword)),
+  const compact = normalized.replace(/\s+/g, "");
+  return keywords.every(
+    (keyword) =>
+      normalized.includes(normalizeText(keyword)) ||
+      compact.includes(normalizeText(keyword).replace(/\s+/g, "")),
   );
+}
+
+function samePricePair(a, b) {
+  if (!a || !b) return false;
+  return a.buy === b.buy && a.sell === b.sell;
 }
 
 function pickRowForProduct(board, product) {
@@ -265,6 +366,20 @@ function pickRowForProduct(board, product) {
     includesAllKeywords(row.text, product.keywords || []),
   );
   if (byKeywords) return byKeywords;
+
+  // Guard against OCR fallback assigning the same luong pair to both row 1 and row 3.
+  if (product.id === "sacombank_sbj_bac_my_nghe") {
+    const row1 = board.rowsByNumber.get(1) ?? null;
+    const row3 = board.rowsByNumber.get(3) ?? null;
+    if (samePricePair(row1, row3)) {
+      const alt = (board.rows || [])
+        .filter((row) => row?.buy != null && row?.sell != null)
+        .filter((row) => row.buy < 10_000)
+        .filter((row) => !samePricePair(row, row1))
+        .sort((a, b) => b.buy - a.buy)[0];
+      if (alt) return alt;
+    }
+  }
 
   return board.rowsByNumber.get(product.rowNo) ?? null;
 }
