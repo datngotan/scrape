@@ -253,6 +253,23 @@ function extractRowsFromSparseText(text) {
   return { rowsByNumber, rows };
 }
 
+function extractPricePairsFromText(text) {
+  const nums = (String(text || "").match(/\d{1,3}(?:[.,]\d{3}){1,2}/g) ?? [])
+    .map((raw) => parseSilverPriceToThousand(raw))
+    .filter((n) => n != null);
+
+  const pairs = [];
+  for (let i = 0; i + 1 < nums.length; i += 1) {
+    const buy = nums[i];
+    const sell = nums[i + 1];
+    if (buy == null || sell == null) continue;
+    if (buy > sell) continue;
+    pairs.push({ buy, sell });
+  }
+
+  return pairs;
+}
+
 async function ocrBoard(payload) {
   const imageMeta = pickLatestBoardImage(payload);
   if (!imageMeta?.url) {
@@ -334,6 +351,26 @@ async function ocrBoard(payload) {
     }
     for (const row of sparse.rows) {
       rows.push(row);
+    }
+
+    // Final fallback: if row 2 (1 kg) is still missing, infer from numeric pairs.
+    // On this board, kg row is always the largest price pair by buy value.
+    if (!rowsByNumber.has(2)) {
+      const pairCandidates = extractPricePairsFromText(
+        `${text}\n${String(dataPsm12.text || "")}`,
+      )
+        .filter((p) => p.buy > 10_000)
+        .sort((a, b) => b.buy - a.buy);
+
+      const kgPair = pairCandidates[0] ?? null;
+      if (kgPair) {
+        rowsByNumber.set(2, {
+          rowNo: 2,
+          text: "fallback kg pair",
+          buy: kgPair.buy,
+          sell: kgPair.sell,
+        });
+      }
     }
 
     return {

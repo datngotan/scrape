@@ -68,7 +68,7 @@ export const GOLD_SOURCES = [
   ...MY_HANH_SOURCES,
   ...THANH_LIEN_SOURCES,
   ...PHUC_NHU_SOURCES,
-  // ...MLC_SOURCES,
+  ...MLC_SOURCES,
   // ...CHAT_VE_GOLD_SOURCES,
 ];
 export const SILVER_TABLE = "silver_prices_9999";
