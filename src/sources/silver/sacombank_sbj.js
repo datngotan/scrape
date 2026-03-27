@@ -53,23 +53,64 @@ function resolveImageUrl(baseUrl, rawSrc) {
   }
 }
 
-function pickLatestBoardImage(payload) {
+function extractDateKeyFromText(input) {
+  const m = String(input || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
+  const dd = m[1].padStart(2, "0");
+  const mm = m[2].padStart(2, "0");
+  const yyyy = m[3];
+  return `${yyyy}${mm}${dd}`;
+}
+
+function extractBoardNoFromText(input) {
+  const m = String(input || "").match(/\bbang\s*(\d{1,2})\b/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickLatestBoardImages(payload) {
   const html = String(payload || "");
   const $ = cheerio.load(html);
+  const images = [];
 
-  let first = null;
   $("img").each((_, el) => {
-    if (first) return;
     const src = resolveImageUrl("https://sacombank-sbj.com", $(el).attr("src"));
     if (!src) return;
     if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
     const alt = $(el).attr("alt") || "";
-    const url = src.replace(/_medium(?=\.[a-z]+$)/i, "");
-    first = { url, alt };
+    images.push({
+      url: src.replace(/_medium(?=\.[a-z]+$)/i, ""),
+      alt,
+      dateKey: extractDateKeyFromText(alt),
+      boardNo: extractBoardNoFromText(alt),
+    });
   });
 
-  return first;
+  if (images.length === 0) return [];
+
+  const latestDateKey = images
+    .map((i) => i.dateKey)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  const latest = latestDateKey
+    ? images.filter((i) => i.dateKey === latestDateKey)
+    : images;
+
+  latest.sort((a, b) => {
+    const aNo = a.boardNo ?? -1;
+    const bNo = b.boardNo ?? -1;
+    return bNo - aNo;
+  });
+
+  return latest;
+}
+
+function pickLatestBoardImage(payload) {
+  return pickLatestBoardImages(payload)[0] ?? null;
 }
 
 function parseLastUpdateText(payload, ocrText, imageMeta) {
@@ -270,6 +311,58 @@ function extractPricePairsFromText(text) {
   return pairs;
 }
 
+function isReasonableKgPair(pair) {
+  if (!pair) return false;
+  const buy = Number(pair.buy);
+  const sell = Number(pair.sell);
+  if (!Number.isFinite(buy) || !Number.isFinite(sell)) return false;
+
+  // SBJ silver kg board is typically in the tens-of-thousands range (thousand VND unit).
+  if (buy < 30_000 || buy > 120_000) return false;
+  if (sell < 30_000 || sell > 140_000) return false;
+  if (sell < buy) return false;
+  if (sell > Math.round(buy * 1.25)) return false;
+
+  return true;
+}
+
+async function scanKgPairFromOtherBoards(payload, worker, usedImageUrl) {
+  const images = pickLatestBoardImages(payload);
+  for (const image of images) {
+    if (!image?.url || image.url === usedImageUrl) continue;
+
+    let preprocessed;
+    try {
+      const imageBuffer = Buffer.from(
+        await (await fetch(image.url)).arrayBuffer(),
+      );
+      preprocessed = await sharp(imageBuffer)
+        .grayscale()
+        .normalize()
+        .resize({ width: 2200 })
+        .sharpen()
+        .threshold(105)
+        .png()
+        .toBuffer();
+    } catch {
+      continue;
+    }
+
+    await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    const { data } = await worker.recognize(preprocessed);
+    const text = String(data.text || "");
+    const pairCandidates = extractPricePairsFromText(text)
+      .filter(isReasonableKgPair)
+      .sort((a, b) => b.buy - a.buy);
+
+    if (pairCandidates.length > 0) {
+      return pairCandidates[0];
+    }
+  }
+
+  return null;
+}
+
 async function ocrBoard(payload) {
   const imageMeta = pickLatestBoardImage(payload);
   if (!imageMeta?.url) {
@@ -359,7 +452,7 @@ async function ocrBoard(payload) {
       const pairCandidates = extractPricePairsFromText(
         `${text}\n${String(dataPsm12.text || "")}`,
       )
-        .filter((p) => p.buy > 10_000)
+        .filter(isReasonableKgPair)
         .sort((a, b) => b.buy - a.buy);
 
       const kgPair = pairCandidates[0] ?? null;
@@ -370,6 +463,20 @@ async function ocrBoard(payload) {
           buy: kgPair.buy,
           sell: kgPair.sell,
         });
+      } else {
+        const crossBoardKgPair = await scanKgPairFromOtherBoards(
+          payload,
+          worker,
+          imageMeta.url,
+        );
+        if (crossBoardKgPair) {
+          rowsByNumber.set(2, {
+            rowNo: 2,
+            text: "fallback kg pair (other board)",
+            buy: crossBoardKgPair.buy,
+            sell: crossBoardKgPair.sell,
+          });
+        }
       }
     }
 
