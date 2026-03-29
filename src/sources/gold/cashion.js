@@ -5,7 +5,7 @@ const CASHION_URL = "https://cashion.vn/gia-vang-hom-nay/";
 const CASHION_PRODUCTS = [
   {
     id: "cashion_nhan_tron_9999_1_chi",
-    name: "Cashion (Nhẫn trơn 999.9 - 1 chỉ)",
+    name: "Cashion (Nhẫn trơn 999.9)",
     label: "Nhẫn trơn Cashion 999.9 - 1 chỉ",
   },
 ];
