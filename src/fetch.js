@@ -96,6 +96,7 @@ export async function fetchHtml(url, options = {}) {
       viewport,
       locale: "vi-VN",
       timezoneId: "Asia/Ho_Chi_Minh",
+      ignoreHTTPSErrors: options.ignoreHTTPSErrors === true,
       userAgent:
         options.userAgent ||
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
