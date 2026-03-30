@@ -80,7 +80,6 @@ function parseLastUpdateText(payload, ocrText, imageMeta) {
   return `00:00:00 ${dd}/${mm}/${yyyy}`;
 }
 
-
 async function ocrBoard(payload) {
   const imageMeta = pickLatestBoardImage(payload);
   if (!imageMeta?.url) {
@@ -101,7 +100,12 @@ async function ocrBoard(payload) {
   const cropHeight = height - cropTop;
 
   const preprocessed = await sharp(imageBuffer)
-    .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+    .extract({
+      left: cropLeft,
+      top: cropTop,
+      width: cropWidth,
+      height: cropHeight,
+    })
     .grayscale()
     .normalize()
     .resize({ width: 1300 })

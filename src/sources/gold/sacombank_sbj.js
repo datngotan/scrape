@@ -40,6 +40,15 @@ const SACOMBANK_SBJ_PRODUCTS = [
 let lastPayloadKey = "";
 let lastBoardPromise = null;
 
+const SBJ_GOLD_PRICE_GRID = {
+  rowCount: 10,
+  firstRowTopRatio: 0.417,
+  rowHeightRatio: 0.0555,
+  buyLeftRatio: 0.518,
+  sellLeftRatio: 0.762,
+  colWidthRatio: 0.22,
+};
+
 function parsePriceToThousand(raw) {
   const digits = String(raw || "").replace(/[^\d]/g, "");
   if (!digits) return null;
@@ -69,16 +78,6 @@ function resolveImageUrl(baseUrl, rawSrc) {
   } catch {
     return null;
   }
-}
-
-function dateKeyFromText(input) {
-  const m = String(input || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return null;
-
-  const dd = m[1].padStart(2, "0");
-  const mm = m[2].padStart(2, "0");
-  const yyyy = m[3];
-  return `${yyyy}${mm}${dd}`;
 }
 
 function pickLatestBoardImage(payload) {
@@ -139,6 +138,37 @@ function extractOrderedRowsFromText(text) {
   return rowsByNumber;
 }
 
+function buildCellRect(width, height, leftRatio, topRatio) {
+  const left = Math.max(0, Math.floor(width * leftRatio));
+  const top = Math.max(0, Math.floor(height * topRatio));
+  const rectWidth = Math.max(20, Math.floor(width * SBJ_GOLD_PRICE_GRID.colWidthRatio));
+  const rectHeight = Math.max(20, Math.floor(height * SBJ_GOLD_PRICE_GRID.rowHeightRatio) - 2);
+
+  return {
+    left,
+    top,
+    width: Math.min(rectWidth, Math.max(1, width - left)),
+    height: Math.min(rectHeight, Math.max(1, height - top)),
+  };
+}
+
+async function recognizePriceCell(worker, imageBuffer, rect) {
+  const cell = await sharp(imageBuffer)
+    .extract(rect)
+    .grayscale()
+    .normalize()
+    .linear(1.5, -30)
+    .resize({ width: 900 })
+    .sharpen()
+    .png()
+    .toBuffer();
+
+  const { data } = await worker.recognize(cell);
+  const text = String(data.text || "");
+  const token = text.match(/\d{1,3}(?:[.,]\d{3}){1,2}/)?.[0] ?? null;
+  return parsePriceToThousand(token);
+}
+
 async function ocrBoard(payload) {
   const imageMeta = pickLatestBoardImage(payload);
   if (!imageMeta?.url) {
@@ -152,63 +182,77 @@ async function ocrBoard(payload) {
   const imageBuffer = Buffer.from(
     await (await fetch(imageMeta.url)).arrayBuffer(),
   );
-  const preprocessed = await sharp(imageBuffer)
-    .grayscale()
-    .normalize()
-    .resize({ width: 2600 })
-    .sharpen()
-    .threshold(120)
-    .png()
-    .toBuffer();
+  const { width, height } = await sharp(imageBuffer).metadata();
 
   const worker = await createWorker("eng");
   try {
-    await worker.setParameters({ tessedit_pageseg_mode: "6" });
-    const { data } = await worker.recognize(preprocessed);
-    const text = String(data.text || "");
-
     const rowsByNumber = new Map();
     const rows = [];
-    const lines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
 
-    const pricePattern = "(\\d{1,3}(?:[.,]\\d{3}){1,2})";
-    const rowRegex = new RegExp(
-      `^(\\d{1,2})[.)]?\\s+(.+?)\\s+${pricePattern}\\s+${pricePattern}$`,
-      "i",
-    );
+    // Primary: OCR each buy/sell cell in the fixed 10-row grid.
+    await worker.setParameters({
+      tessedit_pageseg_mode: "7",
+      tessedit_char_whitelist: "0123456789.,",
+    });
 
-    for (const line of lines) {
-      const m = line.match(rowRegex);
-      if (!m) continue;
+    for (let i = 0; i < SBJ_GOLD_PRICE_GRID.rowCount; i += 1) {
+      const topRatio =
+        SBJ_GOLD_PRICE_GRID.firstRowTopRatio +
+        i * SBJ_GOLD_PRICE_GRID.rowHeightRatio;
 
-      const rowNo = Number(m[1]);
-      const buy = parsePriceToThousand(m[3]);
-      const sell = parsePriceToThousand(m[4]);
-      if (!Number.isFinite(rowNo) || buy == null || sell == null) continue;
+      const buyRect = buildCellRect(
+        width,
+        height,
+        SBJ_GOLD_PRICE_GRID.buyLeftRatio,
+        topRatio,
+      );
+      const sellRect = buildCellRect(
+        width,
+        height,
+        SBJ_GOLD_PRICE_GRID.sellLeftRatio,
+        topRatio,
+      );
 
-      const row = {
-        rowNo,
-        text: normalizeText(m[2]),
-        buy,
-        sell,
-      };
+      const buy = await recognizePriceCell(worker, imageBuffer, buyRect);
+      const sell = await recognizePriceCell(worker, imageBuffer, sellRect);
 
+      if (buy == null || sell == null) continue;
+
+      const rowNo = i + 1;
+      const row = { rowNo, text: "", buy, sell };
       rowsByNumber.set(rowNo, row);
       rows.push(row);
     }
 
-    // Fallback: OCR can split product and prices into separate lines.
-    // In that case, take ordered price pairs (row 1..10) from sparse text mode without OSD.
-    await worker.setParameters({ tessedit_pageseg_mode: "11" });
-    const { data: dataPsm12 } = await worker.recognize(preprocessed);
-    const orderedRows = extractOrderedRowsFromText(
-      String(dataPsm12.text || ""),
-    );
+    // Fallback: OCR right-side columns as one block and infer ordered pairs.
+    const cropLeft = Math.floor(width * 0.5);
+    const cropTop = Math.floor(height * 0.24);
+    const cropWidth = width - cropLeft;
+    const cropHeight = height - cropTop;
+
+    const preprocessed = await sharp(imageBuffer)
+      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .grayscale()
+      .normalize()
+      .resize({ width: 1800 })
+      .sharpen()
+      .png()
+      .toBuffer();
+
+    await worker.setParameters({
+      tessedit_pageseg_mode: "11",
+      tessedit_char_whitelist: "0123456789.,",
+    });
+    const { data } = await worker.recognize(preprocessed);
+    const text = String(data.text || "");
+
+    const orderedRows = extractOrderedRowsFromText(text);
     for (const [rowNo, row] of orderedRows.entries()) {
       if (!rowsByNumber.has(rowNo)) rowsByNumber.set(rowNo, row);
+    }
+
+    if (rows.length === 0) {
+      rows.push(...rowsByNumber.values());
     }
 
     return {
