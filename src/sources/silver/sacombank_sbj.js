@@ -39,64 +39,25 @@ function resolveImageUrl(baseUrl, rawSrc) {
   }
 }
 
-function extractDateKeyFromText(input) {
-  const m = String(input || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return null;
-  const dd = m[1].padStart(2, "0");
-  const mm = m[2].padStart(2, "0");
-  const yyyy = m[3];
-  return `${yyyy}${mm}${dd}`;
-}
-
-function extractBoardNoFromText(input) {
-  const m = String(input || "").match(/\bbang\s*(\d{1,2})\b/i);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : null;
-}
-
-function pickLatestBoardImages(payload) {
+function pickLatestBoardImage(payload) {
   const html = String(payload || "");
   const $ = cheerio.load(html);
-  const images = [];
 
+  let first = null;
   $("img").each((_, el) => {
+    if (first) return;
     const src = resolveImageUrl("https://sacombank-sbj.com", $(el).attr("src"));
     if (!src) return;
     if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
 
     const alt = $(el).attr("alt") || "";
-    images.push({
+    first = {
       url: src.replace(/_medium(?=\.[a-z]+$)/i, ""),
       alt,
-      dateKey: extractDateKeyFromText(alt),
-      boardNo: extractBoardNoFromText(alt),
-    });
+    };
   });
 
-  if (images.length === 0) return [];
-
-  const latestDateKey = images
-    .map((i) => i.dateKey)
-    .filter(Boolean)
-    .sort()
-    .at(-1);
-
-  const latest = latestDateKey
-    ? images.filter((i) => i.dateKey === latestDateKey)
-    : images;
-
-  latest.sort((a, b) => {
-    const aNo = a.boardNo ?? -1;
-    const bNo = b.boardNo ?? -1;
-    return bNo - aNo;
-  });
-
-  return latest;
-}
-
-function pickLatestBoardImage(payload) {
-  return pickLatestBoardImages(payload)[0] ?? null;
+  return first;
 }
 
 function parseLastUpdateText(payload, ocrText, imageMeta) {
