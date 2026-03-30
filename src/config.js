@@ -34,6 +34,7 @@ import { KIM_BAO_TRI_SOURCES } from "./sources/gold/kim_bao_tri.js";
 import { MLC_SOURCES } from "./sources/gold/mai_linh_chau.js";
 import { NGOC_THUY_SOURCES } from "./sources/gold/ngoc_thuy.js";
 import { NGOC_DIEP_SOURCES } from "./sources/gold/ngoc_diep.js";
+import { NGOC_VAN_KHOA_SOURCES } from "./sources/gold/ngoc_van_khoa.js";
 import { CASHION_SOURCES } from "./sources/gold/cashion.js";
 import { ANCARAT_SOURCES } from "./sources/gold/ancarat.js";
 import { KIM_KHANH_VIET_HUNG_SOURCES } from "./sources/gold/kim_khanh_viet_hung.js";
@@ -75,6 +76,7 @@ export const GOLD_SOURCES = [
   ...PHUC_NHU_SOURCES,
   ...NGOC_THUY_SOURCES,
   ...NGOC_DIEP_SOURCES,
+  ...NGOC_VAN_KHOA_SOURCES,
   ...CASHION_SOURCES,
   ...ANCARAT_SOURCES,
   ...KIM_KHANH_VIET_HUNG_SOURCES,
