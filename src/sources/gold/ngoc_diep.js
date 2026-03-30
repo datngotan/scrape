@@ -61,9 +61,16 @@ function extractRows(payload) {
 
     if (cells.length < 3) return;
 
-    // Page rows are typically: [label, type, buy, sell].
-    const buy = parsePriceToken(cells[cells.length - 2]);
-    const sell = parsePriceToken(cells[cells.length - 1]);
+    // Page rows are typically: [label, type, buy, sell, spread].
+    // Prefer explicit buy/sell columns and keep a fallback for 3-col layouts.
+    const buy =
+      parsePriceToken(cells[2]) ??
+      parsePriceToken(cells[1]) ??
+      parsePriceToken(cells[cells.length - 2]);
+    const sell =
+      parsePriceToken(cells[3]) ??
+      parsePriceToken(cells[2]) ??
+      parsePriceToken(cells[cells.length - 1]);
     if (buy == null || sell == null) return;
 
     rows.push({ label: cells[0], buy, sell });

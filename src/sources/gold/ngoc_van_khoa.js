@@ -71,9 +71,16 @@ function extractRows(payload) {
 
     if (cells.length < 3) return;
 
-    // Page rows are typically: [label, type, buy, sell].
-    const buy = parsePriceToken(cells[cells.length - 2]);
-    const sell = parsePriceToken(cells[cells.length - 1]);
+    // Page rows are typically: [label, type, buy, sell, spread].
+    // Prefer explicit buy/sell columns and keep a fallback for 3-col layouts.
+    const buy =
+      parsePriceToken(cells[2]) ??
+      parsePriceToken(cells[1]) ??
+      parsePriceToken(cells[cells.length - 2]);
+    const sell =
+      parsePriceToken(cells[3]) ??
+      parsePriceToken(cells[2]) ??
+      parsePriceToken(cells[cells.length - 1]);
     if (buy == null || sell == null) return;
 
     rows.push({ label: cells[0], buy, sell });
@@ -121,7 +128,8 @@ export const NGOC_VAN_KHOA_SOURCES = NGOC_VAN_KHOA_PRODUCTS.map((product) => ({
   storeName: "Ngọc Vân Khoa",
   unit: "luong",
   url: NGOC_VAN_KHOA_URL,
-  webUrl: "https://www.facebook.com/p/Hi%E1%BB%87u-v%C3%A0ng-Ng%E1%BB%8Dc-V%C3%A2n-Khoa-%C4%90%C3%A0-N%E1%BA%B5ng-100070163714639/",
+  webUrl:
+    "https://www.facebook.com/p/Hi%E1%BB%87u-v%C3%A0ng-Ng%E1%BB%8Dc-V%C3%A2n-Khoa-%C4%90%C3%A0-N%E1%BA%B5ng-100070163714639/",
   location: "Đà Nẵng",
   parse: (payload) => {
     const { buy, sell } = parseByLabel(payload, product.label);
