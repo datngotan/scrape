@@ -34,8 +34,18 @@ function normalizeText(input) {
     .replace(/\s+/g, " ");
 }
 
+function sanitizePriceString(raw) {
+  // Fix typos like "9.9880.000" → "9.980.000"
+  // A group between separators that is longer than 3 digits gets trimmed to its last 3
+  return String(raw || "").replace(
+    /(\d{1,3})[.,](\d{4,})[.,](\d{3})/g,
+    (_, a, b, c) => `${a}.${b.slice(-3)}.${c}`,
+  );
+}
+
 function parsePriceToThousand(raw) {
-  const digits = String(raw || "").replace(/[^\d]/g, "");
+  const sanitized = sanitizePriceString(raw);
+  const digits = sanitized.replace(/[^\d]/g, "");
   if (!digits) return null;
 
   let value = Number(digits);
@@ -58,6 +68,15 @@ function parseBuySellFromPipeLine(line) {
   return { buy, sell };
 }
 
+function getPipeLineLabel(line) {
+  const cells = String(line || "")
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+
+  return cells[0] ?? "";
+}
+
 function parseBuySellByLabels(payload, labels) {
   const normalizedLabels = labels.map((label) => normalizeText(label));
   const raw = String(payload || "");
@@ -67,7 +86,7 @@ function parseBuySellByLabels(payload, labels) {
     const line = lines[i];
     if (!line.includes("|")) continue;
 
-    const normalizedFirstCell = normalizeText(line.split("|")[0]);
+    const normalizedFirstCell = normalizeText(getPipeLineLabel(line));
     if (
       !normalizedLabels.some((label) => normalizedFirstCell.includes(label))
     ) {
@@ -85,15 +104,16 @@ function parseBuySellByLabels(payload, labels) {
   }
 
   const text = stripHtmlToText(raw);
+  const normalizedText = normalizeText(text);
   for (const normalizedLabel of normalizedLabels) {
-    const labelIndex = normalizeText(text).indexOf(normalizedLabel);
+    const labelIndex = normalizedText.indexOf(normalizedLabel);
     if (labelIndex < 0) continue;
 
-    const scope = text.slice(
+    const scope = normalizedText.slice(
       labelIndex,
-      Math.min(text.length, labelIndex + 220),
+      Math.min(normalizedText.length, labelIndex + 220),
     );
-    const grouped = scope.match(/\d{1,3}([.,\s])\d{3}\1\d{3}/g) ?? [];
+    const grouped = scope.match(/\d{1,3}(?:[.,\s]\d{3,4}){1,2}/g) ?? [];
 
     const prices = grouped
       .map((chunk) => parsePriceToThousand(chunk))
@@ -107,7 +127,6 @@ function parseBuySellByLabels(payload, labels) {
     }
   }
 
-  const normalizedText = normalizeText(text);
   const token = "(\\d[\\d.,]*)";
 
   for (const normalizedLabel of normalizedLabels) {
