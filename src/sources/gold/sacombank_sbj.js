@@ -141,8 +141,14 @@ function extractOrderedRowsFromText(text) {
 function buildCellRect(width, height, leftRatio, topRatio) {
   const left = Math.max(0, Math.floor(width * leftRatio));
   const top = Math.max(0, Math.floor(height * topRatio));
-  const rectWidth = Math.max(20, Math.floor(width * SBJ_GOLD_PRICE_GRID.colWidthRatio));
-  const rectHeight = Math.max(20, Math.floor(height * SBJ_GOLD_PRICE_GRID.rowHeightRatio) - 2);
+  const rectWidth = Math.max(
+    20,
+    Math.floor(width * SBJ_GOLD_PRICE_GRID.colWidthRatio),
+  );
+  const rectHeight = Math.max(
+    20,
+    Math.floor(height * SBJ_GOLD_PRICE_GRID.rowHeightRatio) - 2,
+  );
 
   return {
     left,
@@ -231,7 +237,12 @@ async function ocrBoard(payload) {
     const cropHeight = height - cropTop;
 
     const preprocessed = await sharp(imageBuffer)
-      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .extract({
+        left: cropLeft,
+        top: cropTop,
+        width: cropWidth,
+        height: cropHeight,
+      })
       .grayscale()
       .normalize()
       .resize({ width: 1800 })
