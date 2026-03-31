@@ -67,8 +67,10 @@ function parseBuySellByLabels(payload, labels) {
     const line = lines[i];
     if (!line.includes("|")) continue;
 
-    const normalizedLine = normalizeText(line);
-    if (!normalizedLabels.some((label) => normalizedLine.includes(label))) {
+    const normalizedFirstCell = normalizeText(line.split("|")[0]);
+    if (
+      !normalizedLabels.some((label) => normalizedFirstCell.includes(label))
+    ) {
       continue;
     }
 
@@ -119,7 +121,8 @@ function parseBuySellByLabels(payload, labels) {
 
     const buy = parsePriceToThousand(m[1]);
     const sell = parsePriceToThousand(m[2]);
-    if (buy != null && sell != null) return { buy, sell };
+    if (buy != null && sell != null && buy >= 1000 && sell >= 1000)
+      return { buy, sell };
   }
 
   return { buy: null, sell: null };
