@@ -94,7 +94,7 @@ export const MLC_SOURCES = MLC_PRODUCTS.map((product) => ({
   location: "Thanh Hóa",
   fetchOptions: {
     timeoutMs: 90_000,
-    waitMs: 4_000,
+    waitMs: 5_000,
     maxAttempts: 4,
     waitUntil: "commit",
   },
