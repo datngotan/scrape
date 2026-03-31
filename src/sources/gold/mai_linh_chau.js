@@ -29,11 +29,34 @@ function normalizeText(input) {
 }
 
 function parsePriceToken(raw) {
-  const digits = String(raw || "").replace(/[^\d]/g, "");
-  if (!digits) return null;
+  const input = String(raw || "");
+  if (!input) return null;
 
-  const n = Number(digits);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  const normalizePrice = (digits) => {
+    let n = Number(digits);
+    if (!Number.isFinite(n) || n <= 0) return null;
+
+    // If the site emits full VND values (e.g. 15.800.000), normalize to nghin VND.
+    if (n >= 1_000_000) n = Math.round(n / 1000);
+
+    // Mai Linh Chau gold rows should be in a practical range like 15.000-20.000.
+    if (n < 1_000 || n > 200_000) return null;
+    return n;
+  };
+
+  const groupedMatches = input.match(/\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,}/g) ?? [];
+  for (const token of groupedMatches) {
+    const digits = token.replace(/[^\d]/g, "");
+    if (!digits) continue;
+
+    const value = normalizePrice(digits);
+    if (value != null) return value;
+  }
+
+  // Fallback for plain numeric strings while still rejecting short noisy fragments.
+  const fallbackDigits = input.replace(/[^\d]/g, "");
+  if (fallbackDigits.length < 4) return null;
+  return normalizePrice(fallbackDigits);
 }
 
 function parseTableRows(payload) {
@@ -49,8 +72,9 @@ function parseTableRows(payload) {
 
     if (cells.length < 3) return;
 
-    const buy = parsePriceToken(cells[1]);
-    const sell = parsePriceToken(cells[2]);
+    // Use trailing columns in case the table injects extra metadata columns.
+    const buy = parsePriceToken(cells[cells.length - 2]);
+    const sell = parsePriceToken(cells[cells.length - 1]);
     if (buy == null || sell == null) return;
 
     rows.push({ label: cells[0], buy, sell });
