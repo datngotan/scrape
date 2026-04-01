@@ -28,13 +28,7 @@ const SACOMBANK_SBJ_PRODUCTS = [
     name: "Sacombank-SBJ (Vàng 22K 95%)",
     rowNo: 5,
     keywords: ["22k", "95"],
-  },
-  {
-    id: "sacombank_sbj_vang_ep_vi_e_voucher",
-    name: "Sacombank-SBJ (Vàng ép vỉ E-Voucher)",
-    rowNo: 10,
-    keywords: ["voucher"],
-  },
+  }
 ];
 
 let lastPayloadKey = "";

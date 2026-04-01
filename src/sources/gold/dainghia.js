@@ -2,31 +2,34 @@ import * as cheerio from "cheerio";
 
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
+const DAI_NGHIA_URL = "https://vangdainghia.com/";
+const DAI_NGHIA_WEB_URL = "https://vangdainghia.com/";
+
 const DAI_NGHIA_PRODUCTS = [
   {
     id: "dai_nghia_9999_vi",
     name: "Đại Nghĩa (9999 vĩ)",
-    labels: ["9999 vĩ", "9999"],
+    labels: ["9999 vĩ"],
   },
   {
     id: "dai_nghia_nhan_tron_9999",
     name: "Đại Nghĩa (Nhẫn Tròn 9999 Đại Nghĩa)",
-    labels: ["Nhẫn Tròn 9999 Đại Nghĩa", "9999"],
+    labels: ["Nhẫn Tròn 9999 Đại Nghĩa"],
   },
   {
     id: "dai_nghia_vang_98",
     name: "Đại Nghĩa (Vàng 98)",
-    labels: ["Vàng 98", "980"],
+    labels: ["Vàng 98"],
   },
   {
     id: "dai_nghia_vang_96",
     name: "Đại Nghĩa (Vàng 96%)",
-    labels: ["Vàng 96%", "960"],
+    labels: ["Vàng 96%"],
   },
   {
     id: "dai_nghia_nu_trang_980",
     name: "Đại Nghĩa (Nữ trang 980)",
-    labels: ["Nữ trang 980", "980"],
+    labels: ["Nữ trang 980"],
   },
 ];
 
@@ -89,19 +92,22 @@ function parseTableRows(payload) {
 }
 
 function parseBuySellByLabel(payload, labels) {
-  const normalizedLabels = labels.map((label) => normalizeText(label));
+  const normalizedLabels = labels
+    .map((label) => normalizeText(label))
+    .sort((a, b) => b.length - a.length);
   const raw = String(payload || "");
 
-  // Primary: parse structured table cells from direct HTML.
+  // Primary: parse structured table cells from direct HTML/markdown-derived rows.
   const tableRows = parseTableRows(raw);
-  for (const row of tableRows) {
-    const normalizedRowLabel = normalizeText(row.label);
-    if (
-      normalizedLabels.some((normalizedLabel) =>
-        normalizedRowLabel.includes(normalizedLabel),
-      )
-    ) {
-      return { buy: row.buy, sell: row.sell };
+  for (const normalizedLabel of normalizedLabels) {
+    for (const row of tableRows) {
+      const normalizedRowLabel = normalizeText(row.label);
+      if (
+        normalizedRowLabel === normalizedLabel ||
+        normalizedRowLabel.includes(normalizedLabel)
+      ) {
+        return { buy: row.buy, sell: row.sell };
+      }
     }
   }
 
@@ -175,8 +181,8 @@ export const DAI_NGHIA_SOURCES = DAI_NGHIA_PRODUCTS.map((product) => ({
   storeName: "Vàng Bạc Đại Nghĩa",
   location: "Nam Định",
   unit: "chi",
-  url: "https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
-  webUrl: "https://giavangmaothiet.com/gia-vang-dai-nghia-hom-nay/",
+  url: DAI_NGHIA_URL,
+  webUrl: DAI_NGHIA_WEB_URL,
   parse: (payload) => {
     const { buy, sell } = parseBuySellByLabel(payload, product.labels);
     return {
