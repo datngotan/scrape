@@ -71,12 +71,26 @@ function isAliasMatch(label, aliases) {
   const normalizedLabel = normalizeText(label);
   return aliases.some((alias) => {
     const normalizedAlias = normalizeText(alias);
+    if (!normalizedAlias) return false;
+
     return (
       normalizedLabel === normalizedAlias ||
-      normalizedLabel.includes(normalizedAlias) ||
-      normalizedAlias.includes(normalizedLabel)
+      normalizedLabel.startsWith(`${normalizedAlias} `)
     );
   });
+}
+
+function isProductMatch(label, product) {
+  const aliases = [product.label, ...(product.aliases ?? [])];
+  const normalizedLabel = normalizeText(label);
+  const target = normalizeText(product.label);
+
+  return (
+    isAliasMatch(label, aliases) ||
+    normalizedLabel === target ||
+    normalizedLabel.startsWith(`${target} `) ||
+    isProductIdMatch(label, product.id)
+  );
 }
 
 function isProductIdMatch(label, productId) {
@@ -165,8 +179,6 @@ function parseTime(payload) {
 }
 
 function parseBuySellByLabel(payload, product) {
-  const aliases = [product.label, ...(product.aliases ?? [])];
-  const target = normalizeText(product.label);
   const raw = String(payload || "");
 
   const lines = raw.split(/\r?\n/);
@@ -178,7 +190,7 @@ function parseBuySellByLabel(payload, product) {
       .map((part) => stripTags(part))
       .filter((part) => part.length > 0);
     if (parts.length < 4) continue;
-    if (!normalizeText(parts[0]).includes(target)) continue;
+    if (!isProductMatch(parts[0], product)) continue;
 
     return {
       buy: toNumber(parts[2]),
@@ -188,17 +200,10 @@ function parseBuySellByLabel(payload, product) {
 
   const rows = raw.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
   for (const row of rows) {
-    const rowText = stripTags(row);
-    const normalizedRowText = normalizeText(rowText);
-    if (
-      !isAliasMatch(rowText, aliases) &&
-      !normalizedRowText.includes(target) &&
-      !isProductIdMatch(rowText, product.id)
-    ) {
-      continue;
-    }
-
     const cells = row.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) ?? [];
+    const labelText = cells.length > 0 ? stripTags(cells[0]) : stripTags(row);
+    if (!isProductMatch(labelText, product)) continue;
+
     if (cells.length >= 4) {
       return {
         buy: toNumber(stripTags(cells[2])),
@@ -206,6 +211,7 @@ function parseBuySellByLabel(payload, product) {
       };
     }
 
+    const rowText = stripTags(row);
     const nums = rowText.match(/\d{1,3}(?:[.,]\d{3})*/g) ?? [];
     if (nums.length >= 2) {
       return {
