@@ -8,7 +8,7 @@ const THANH_LIEN_PRODUCTS = [
   { id: "thanh_lien_ts999", code: "TS999", name: "Thành Liên (TS999)" },
   { id: "thanh_lien_ts9999", code: "TS9999", name: "Thành Liên (TS9999)" },
   { id: "thanh_lien_ts98", code: "TS98", name: "Thành Liên (TS98)" },
-  { id: "thanh_lien_vi9999", code: "VI9999", name: "Thành Liên (VI9999)" },
+  { id: "thanh_lien_vi9999", code: "Vl9999", name: "Thành Liên (VI9999)" },
   { id: "thanh_lien_nt999", code: "NT999", name: "Thành Liên (NT999)" },
 ];
 

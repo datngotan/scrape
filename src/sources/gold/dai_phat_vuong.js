@@ -6,7 +6,7 @@ const DAI_PHAT_VUONG_PRODUCTS = [
   {
     id: "dai_phat_vuong_nhan_tron_9999",
     name: "Đại Phát Vượng (Nhẫn Trơn 9999)",
-    label: "Nhẫn Trơn Đại Phát Vượng 9999",
+    label: "NHẪN TRƠN 9999",
   },
   {
     id: "dai_phat_vuong_trang_suc_24k",

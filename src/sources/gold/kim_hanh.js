@@ -30,7 +30,7 @@ const KIM_HANH_PRODUCTS = [
   },
   {
     id: "kim_hanh_ep_vi_9999",
-    name: "Kim Hạnh (Kim Hạnh Ép Vỉ 9999)",
+    name: "VI9999",
     label: "Kim Hạnh Ép VỈ 9999",
   },
   {
