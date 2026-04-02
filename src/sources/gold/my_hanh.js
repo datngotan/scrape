@@ -147,7 +147,7 @@ function parseTime(payload) {
 export const MY_HANH_SOURCES = MY_HANH_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
-  storeName: "Tiệm Vàng Mỹ Hạnh",
+  storeName: "Mỹ Hạnh",
   url: "https://giavangmaothiet.com/gia-vang-my-hanh-hom-nay/",
   webUrl: "https://giavangmaothiet.com/gia-vang-my-hanh-hom-nay/",
   location: "Hà Nội",

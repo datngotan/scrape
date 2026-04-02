@@ -113,7 +113,7 @@ export const LAM_NGOC_THANH_SOURCES = LAM_NGOC_THANH_PRODUCTS.map(
   (product) => ({
     id: product.id,
     name: product.name,
-    storeName: "Tiệm Vàng Lâm Ngọc Thanh",
+    storeName: "Lâm Ngọc Thanh",
     url: "https://giavangmaothiet.com/gia-vang-lam-ngoc-thanh-hom-nay/",
     webUrl: "https://giavangmaothiet.com/gia-vang-lam-ngoc-thanh-hom-nay/",
     location: "Đồng Nai",

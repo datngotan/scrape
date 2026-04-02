@@ -82,7 +82,7 @@ function parseByLabel(payload, label) {
 export const NGOC_MAI_SOURCES = PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
-  storeName: "Tiệm Vàng Ngọc Mai",
+  storeName: "Ngọc Mai",
   location: "Tây Ninh",
   unit: "luong",
   url: NGOC_MAI_CANVA_URL,

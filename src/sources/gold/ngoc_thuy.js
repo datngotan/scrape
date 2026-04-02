@@ -150,7 +150,7 @@ async function getRowsByLabel(payload) {
 export const NGOC_THUY_SOURCES = NGOC_THUY_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
-  storeName: "Tiệm Vàng Ngọc Thủy",
+  storeName: "Ngọc Thủy",
   url: NGOC_THUY_URL,
   webUrl: NGOC_THUY_URL,
   location: "TP.HCM",

@@ -147,7 +147,7 @@ function parseTime(payload) {
 export const HUONG_SON_SOURCES = HUONG_SON_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
-  storeName: "Tiệm Vàng Hương Sơn",
+  storeName: "Hương Sơn",
   url: "https://giavangmaothiet.com/gia-vang-huong-son-hom-nay/",
   webUrl: "https://giavangmaothiet.com/gia-vang-huong-son-hom-nay/",
   location: "Ninh Bình",

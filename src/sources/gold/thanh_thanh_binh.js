@@ -23,7 +23,7 @@ const THANH_THANH_BINH_PRODUCTS = [
   },
   {
     id: "thanh_thanh_binh_98",
-    name: "Thanh Thanh Bình (98)",
+    name: "Thanh Thanh Bình (Vàng 98)",
     label: "98 TT Bình",
   },
 ];
@@ -114,7 +114,7 @@ function parseTime(payload) {
 export const THANH_THANH_BINH_SOURCES = THANH_THANH_BINH_PRODUCTS.map((product) => ({
   id: product.id,
   name: product.name,
-  storeName: "Tiệm Vàng Thanh Thanh Bình",
+  storeName: "Vàng Thanh Thanh Bình",
   url: "https://giavangmaothiet.com/tiem-vang-thanh-thanh-binh/",
   webUrl: "https://giavangmaothiet.com/tiem-vang-thanh-thanh-binh/",
   location: "TP.HCM",
