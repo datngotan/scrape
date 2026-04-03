@@ -32,6 +32,7 @@ const KIM_HANH_PRODUCTS = [
     id: "kim_hanh_ep_vi_9999",
     name: "VI9999",
     label: "Kim Hạnh Ép VỈ 9999",
+    aliases: ["Vl9999", "VI9999", "VI 9999"],
   },
   {
     id: "kim_hanh_nhan_tron_999",
@@ -83,12 +84,14 @@ function parseTableRows(payload) {
   return rows;
 }
 
-function parseBuySellByLabel(payload, label) {
-  const normalizedLabel = normalizeText(label);
+function parseBuySellByLabel(payload, labels) {
+  const targets = (Array.isArray(labels) ? labels : [labels])
+    .map((v) => normalizeText(v))
+    .filter(Boolean);
 
   const rows = parseTableRows(payload);
   for (const row of rows) {
-    if (normalizeText(row.label) === normalizedLabel) {
+    if (targets.includes(normalizeText(row.label))) {
       return { buy: row.buy, sell: row.sell };
     }
   }
@@ -123,7 +126,8 @@ export const KIM_HANH_SOURCES = KIM_HANH_PRODUCTS.map((product) => ({
   webUrl: "https://vangkimhanh.com/",
   location: "TP.HCM",
   parse: (payload) => {
-    const { buy, sell } = parseBuySellByLabel(payload, product.label);
+    const labels = [product.label, ...(product.aliases || [])];
+    const { buy, sell } = parseBuySellByLabel(payload, labels);
     return {
       buy,
       sell,

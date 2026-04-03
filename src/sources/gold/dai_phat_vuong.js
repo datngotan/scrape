@@ -6,7 +6,8 @@ const DAI_PHAT_VUONG_PRODUCTS = [
   {
     id: "dai_phat_vuong_nhan_tron_9999",
     name: "Đại Phát Vượng (Nhẫn Trơn 9999)",
-    label: "NHẪN TRƠN 9999",
+    label: "Nhẫn Trơn Đại Phát Vượng 9999",
+    aliases: ["NHẪN TRƠN 9999", "Nhan Tron 9999"],
   },
   {
     id: "dai_phat_vuong_trang_suc_24k",
@@ -60,12 +61,14 @@ function parseTableRows(payload) {
   return rows;
 }
 
-function parseBuySellByLabel(payload, label) {
-  const normalizedLabel = normalizeText(label);
+function parseBuySellByLabel(payload, labels) {
+  const targets = (Array.isArray(labels) ? labels : [labels])
+    .map((v) => normalizeText(v))
+    .filter(Boolean);
 
   const rows = parseTableRows(payload);
   for (const row of rows) {
-    if (normalizeText(row.label) === normalizedLabel) {
+    if (targets.includes(normalizeText(row.label))) {
       return { buy: row.buy, sell: row.sell };
     }
   }
@@ -92,7 +95,8 @@ export const DAI_PHAT_VUONG_SOURCES = DAI_PHAT_VUONG_PRODUCTS.map(
     webUrl: "https://giavangmaothiet.com/gia-vang-dai-phat-vuong-nam-dinh/",
     location: "Nam Định",
     parse: (payload) => {
-      const { buy, sell } = parseBuySellByLabel(payload, product.label);
+      const labels = [product.label, ...(product.aliases || [])];
+      const { buy, sell } = parseBuySellByLabel(payload, labels);
       return {
         buy,
         sell,
