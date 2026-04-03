@@ -8,7 +8,7 @@ const THANH_LIEN_PRODUCTS = [
   { id: "thanh_lien_ts999", code: "TS999", name: "Thành Liên (TS999)" },
   { id: "thanh_lien_ts9999", code: "TS9999", name: "Thành Liên (TS9999)" },
   { id: "thanh_lien_ts98", code: "TS98", name: "Thành Liên (TS98)" },
-  { id: "thanh_lien_vi9999", code: "Vl9999", name: "Thành Liên (VI9999)" },
+  { id: "thanh_lien_vi9999", code: "VI9999", name: "Thành Liên (VI9999)" },
   { id: "thanh_lien_nt999", code: "NT999", name: "Thành Liên (NT999)" },
 ];
 
@@ -48,7 +48,9 @@ function parseBuySellByCode(payload, code) {
         .filter(Boolean);
       if (cells.length < 3) continue;
 
-      const codeCellIdx = cells.findIndex((cell) => normalizeText(cell) === target);
+      const codeCellIdx = cells.findIndex(
+        (cell) => normalizeText(cell) === target,
+      );
       if (codeCellIdx < 0) continue;
 
       const buy = parsePriceToken(cells[codeCellIdx + 1] ?? "");
@@ -74,7 +76,9 @@ function parseBuySellByCode(payload, code) {
       .filter(Boolean);
     if (cells.length < 3) continue;
 
-    const codeCellIdx = cells.findIndex((cell) => normalizeText(cell) === target);
+    const codeCellIdx = cells.findIndex(
+      (cell) => normalizeText(cell) === target,
+    );
     if (codeCellIdx < 0) continue;
 
     const buy = parsePriceToken(cells[codeCellIdx + 1] ?? "");
@@ -85,7 +89,9 @@ function parseBuySellByCode(payload, code) {
   // Fallback over flattened text.
   const text = normalizeText(stripHtmlToText(payload));
   const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const m = text.match(new RegExp(`${escaped}\\s+(\\d[\\d.\\s,]*)\\s+(\\d[\\d.\\s,]*)`, "i"));
+  const m = text.match(
+    new RegExp(`${escaped}\\s+(\\d[\\d.\\s,]*)\\s+(\\d[\\d.\\s,]*)`, "i"),
+  );
   if (m) {
     const buy = parsePriceToken(m[1]);
     const sell = parsePriceToken(m[2]);
@@ -97,7 +103,9 @@ function parseBuySellByCode(payload, code) {
 
 function parseTime(payload) {
   const text = stripHtmlToText(payload);
-  const m = text.match(/cập\s*nhật\s*lúc\s*:\s*(\d{1,2})h(\d{2})\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+  const m = text.match(
+    /cập\s*nhật\s*lúc\s*:\s*(\d{1,2})h(\d{2})\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
+  );
   if (m) {
     const HH = m[1].padStart(2, "0");
     const MI = m[2];
