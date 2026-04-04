@@ -30,7 +30,6 @@ import { THANH_LIEN_SOURCES } from "./sources/gold/thanh_lien.js";
 import { PHUC_NHU_SOURCES } from "./sources/gold/phuc_nhu.js";
 import { KIM_TAI_NGOC_DIAMOND_SOURCES } from "./sources/gold/kim_tai_ngoc_diamond.js";
 import { KIM_BAO_TRI_SOURCES } from "./sources/gold/kim_bao_tri.js";
-import { MLC_SOURCES } from "./sources/gold/mai_linh_chau.js";
 import { NGOC_THUY_SOURCES } from "./sources/gold/ngoc_thuy.js";
 import { NGOC_DIEP_SOURCES } from "./sources/gold/ngoc_diep.js";
 import { NGOC_VAN_KHOA_SOURCES } from "./sources/gold/ngoc_van_khoa.js";
@@ -77,7 +76,6 @@ export const GOLD_SOURCES = [
   ...CASHION_SOURCES,
   ...ANCARAT_SOURCES,
   ...KIM_KHANH_VIET_HUNG_SOURCES,
-  ...MLC_SOURCES,
   // ...CHAT_VE_GOLD_SOURCES,
 ];
 export const SILVER_TABLE = "silver_prices_9999";
