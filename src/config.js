@@ -6,7 +6,6 @@ import { CHAT_VE_SILVER_SOURCES } from "./sources/silver/chat_ve.js";
 import { KIM_BAO_TRI_SILVER_SOURCES } from "./sources/silver/kim_bao_tri.js";
 import { CHIEN_MINH_SOURCES } from "./sources/gold/chien_minh.js";
 import { HUONG_CHI_SOURCES } from "./sources/gold/huong_chi.js";
-import { HUONG_SON_SOURCES } from "./sources/gold/huong_son.js";
 import { KIM_HANH_SOURCES } from "./sources/gold/kim_hanh.js";
 import { KIM_PHU_THAI_SOURCES } from "./sources/gold/kim_phu_thai.js";
 import { MAO_THIET_SOURCES } from "./sources/gold/mao_thiet.js";
@@ -51,7 +50,6 @@ export const GOLD_SOURCES = [
   ...KIM_TIN_SOURCES,
   ...CHIEN_MINH_SOURCES,
   ...HUONG_CHI_SOURCES,
-  ...HUONG_SON_SOURCES,
   ...NGOC_MAI_SOURCES,
   ...NGOC_CUA_NHA_BE_SOURCES,
   ...PHU_TAI_SOURCES,
