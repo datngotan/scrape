@@ -7,7 +7,7 @@ import {
 const KIM_BAO_TRI_SILVER_PRODUCTS = [
   {
     id: "kim_bao_tri_bac_thoi_1kg",
-    name: "Kim Bảo Trí (Bạc thỏi 1kg)",
+    name: "Kim Bảo Trí (Bạc thỏi)",
     label: "Bạc thỏi 1kg KIM BẢO TRÍ",
     unit: "kg",
   },

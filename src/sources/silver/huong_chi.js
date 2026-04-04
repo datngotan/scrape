@@ -11,13 +11,13 @@ const HUONG_CHI_SOURCE_URL = "http://vanghuongchi.com.vn/";
 const PRODUCTS = [
   {
     id: "huong_chi_bac_thoi_luong",
-    name: "Hương Chi - Thỏi Bạc 1 Lượng",
+    name: "Hương Chi (Thỏi Bạc)",
     needle: "Thỏi Bạc 1 Lượng",
     unit: "luong",
   },
   {
     id: "huong_chi_bac_thoi_kg",
-    name: "Hương Chi - Thỏi Bạc 1 KG",
+    name: "Hương Chi (Thỏi Bạc)",
     needle: "Thỏi Bạc 1 KG",
     unit: "kg",
   },

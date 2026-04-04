@@ -18,7 +18,6 @@ import { PHUONG_NAM_GOLD_SOURCES } from "./sources/gold/phuong_nam_gold.js";
 import { VIET_A_GOLD_SOURCES } from "./sources/gold/viet_a_gold.js";
 import { DA_PHUC_SOURCES } from "./sources/gold/da_phuc.js";
 import { HANH_AN_SOURCES } from "./sources/gold/hanh_an.js";
-import { DAI_NGHIA_SOURCES } from "./sources/gold/dainghia.js";
 import { DAI_PHAT_VUONG_SOURCES } from "./sources/gold/dai_phat_vuong.js";
 import { ANH_MINH_GOLD_SOURCES } from "./sources/gold/anh_minh.js";
 import { SACOMBANK_SBJ_SOURCES } from "./sources/gold/sacombank_sbj.js";

@@ -28,14 +28,14 @@ export const BAC_MAT_TRANG_SOURCES = [
   {
     ...SHARED,
     id: "bac_mat_trang_bac_khoi_1_luong",
-    name: "Bạc Mặt Trăng - Bạc Khối",
+    name: "Bạc Mặt Trăng (Bạc Khối)",
     unit: "luong",
     parse: (html) => parse(html, "1 Lượng", "luong"),
   },
   {
     ...SHARED,
     id: "bac_mat_trang_bac_khoi_1_kg",
-    name: "Bạc Mặt Trăng - Bạc Khối",
+    name: "Bạc Mặt Trăng (Bạc Khối)",
     unit: "kg",
     parse: (html) => parse(html, "1 Kg", "kg"),
   },
