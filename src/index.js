@@ -38,6 +38,47 @@ function buildUpsertedIdsForTable(succeeded, tableName) {
     .map((item) => `${item.id}:${item.row.unit}`);
 }
 
+async function addPriceChanges(supabase, table, rows) {
+  if (rows.length === 0) return rows;
+
+  const ids = [...new Set(rows.map((r) => r.id))];
+  const hasUnit = "unit" in rows[0];
+
+  const selectCols =
+    "id, buy_price, sell_price, buy_change, sell_change" +
+    (hasUnit ? ", unit" : "");
+  const { data: existing, error } = await supabase
+    .from(table)
+    .select(selectCols)
+    .in("id", ids);
+
+  if (error || !existing) return rows;
+
+  const makeKey = (r) =>
+    hasUnit && r.unit != null ? `${r.id}:${r.unit}` : r.id;
+  const existingMap = new Map(existing.map((r) => [makeKey(r), r]));
+
+  return rows.map((row) => {
+    const old = existingMap.get(makeKey(row));
+    if (!old) {
+      return { ...row, buy_change: null, sell_change: null };
+    }
+
+    const buyChanged = row.buy_price !== old.buy_price;
+    const sellChanged = row.sell_price !== old.sell_price;
+
+    return {
+      ...row,
+      buy_change: buyChanged
+        ? row.buy_price - old.buy_price
+        : (old.buy_change ?? null),
+      sell_change: sellChanged
+        ? row.sell_price - old.sell_price
+        : (old.sell_change ?? null),
+    };
+  });
+}
+
 function normalizeUrlForCache(rawUrl) {
   const trimmed = String(rawUrl || "").trim();
   try {
@@ -258,7 +299,12 @@ export async function runScrapeJob(options = {}) {
       const dbErrors = [];
 
       for (const [table, tableRows] of tableToRows.entries()) {
-        const { error } = await supabase.from(table).upsert(tableRows);
+        const rowsWithChanges = await addPriceChanges(
+          supabase,
+          table,
+          tableRows,
+        );
+        const { error } = await supabase.from(table).upsert(rowsWithChanges);
         if (error) {
           dbErrors.push(`${table}: ${error.message}`);
           console.error("=== DB UPSERT ERROR ===", table, error.message);
