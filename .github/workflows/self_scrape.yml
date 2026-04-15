@@ -12,7 +12,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/30 0-13 * * *'
   workflow_dispatch: # allow manual run
 
 jobs:
