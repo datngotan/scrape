@@ -23,24 +23,24 @@ const SACOMBANK_SBJ_PRODUCTS = [
     rowNo: 4,
     keywords: ["24k", "99 99"],
   },
-  {
-    id: "sacombank_sbj_vang_22k_95",
-    name: "Sacombank-SBJ (Vàng 22K 95%)",
-    rowNo: 5,
-    keywords: ["22k", "95"],
-  }
 ];
 
 let lastPayloadKey = "";
 let lastBoardPromise = null;
 
+const SBJ_GOLD_DEBUG =
+  process.env.SACOMBANK_SBJ_GOLD_DEBUG === "1" ||
+  process.env.SACOMBANK_SBJ_DEBUG === "1" ||
+  process.env.DEBUG_SBJ === "1";
+
 const SBJ_GOLD_PRICE_GRID = {
-  rowCount: 10,
-  firstRowTopRatio: 0.417,
-  rowHeightRatio: 0.0555,
+  rowCount: 8,
+  firstRowTopRatio: 0.4195,
+  rowHeightRatio: 0.0686,
   buyLeftRatio: 0.518,
   sellLeftRatio: 0.762,
-  colWidthRatio: 0.22,
+  buyWidthRatio: 0.22,
+  sellWidthRatio: 0.22,
 };
 
 function parsePriceToThousand(raw) {
@@ -120,7 +120,7 @@ function extractOrderedRowsFromText(text) {
 
   const rowsByNumber = new Map();
   let rowNo = 1;
-  for (let i = 0; i + 1 < nums.length && rowNo <= 10; i += 2, rowNo += 1) {
+  for (let i = 0; i + 1 < nums.length && rowNo <= 8; i += 2, rowNo += 1) {
     rowsByNumber.set(rowNo, {
       rowNo,
       text: "",
@@ -132,18 +132,18 @@ function extractOrderedRowsFromText(text) {
   return rowsByNumber;
 }
 
-function buildCellRect(width, height, leftRatio, topRatio) {
-  const left = Math.max(0, Math.floor(width * leftRatio));
-  const top = Math.max(0, Math.floor(height * topRatio));
-  const rectWidth = Math.max(
-    20,
-    Math.floor(width * SBJ_GOLD_PRICE_GRID.colWidthRatio),
-  );
-  const rectHeight = Math.max(
-    20,
-    Math.floor(height * SBJ_GOLD_PRICE_GRID.rowHeightRatio) - 2,
-  );
-
+function buildCellRect(
+  width,
+  height,
+  leftRatio,
+  topRatio,
+  widthRatio,
+  heightRatio,
+) {
+  const left = Math.max(0, Math.floor(width * leftRatio) + 2);
+  const top = Math.max(0, Math.floor(height * topRatio) + 2);
+  const rectWidth = Math.max(20, Math.floor(width * widthRatio) - 4);
+  const rectHeight = Math.max(20, Math.floor(height * heightRatio) - 4);
   return {
     left,
     top,
@@ -166,10 +166,10 @@ async function recognizePriceCell(worker, imageBuffer, rect) {
   const { data } = await worker.recognize(cell);
   const text = String(data.text || "");
   const token = text.match(/\d{1,3}(?:[.,]\d{3}){1,2}/)?.[0] ?? null;
-  return parsePriceToThousand(token);
+  return { price: parsePriceToThousand(token), text };
 }
 
-async function ocrBoard(payload) {
+async function ocrBoard(payload, options = {}) {
   const imageMeta = pickLatestBoardImage(payload);
   if (!imageMeta?.url) {
     return {
@@ -188,6 +188,7 @@ async function ocrBoard(payload) {
   try {
     const rowsByNumber = new Map();
     const rows = [];
+    const cellResults = [];
 
     // Primary: OCR each buy/sell cell in the fixed 10-row grid.
     await worker.setParameters({
@@ -205,23 +206,41 @@ async function ocrBoard(payload) {
         height,
         SBJ_GOLD_PRICE_GRID.buyLeftRatio,
         topRatio,
+        SBJ_GOLD_PRICE_GRID.buyWidthRatio,
+        SBJ_GOLD_PRICE_GRID.rowHeightRatio,
       );
       const sellRect = buildCellRect(
         width,
         height,
         SBJ_GOLD_PRICE_GRID.sellLeftRatio,
         topRatio,
+        SBJ_GOLD_PRICE_GRID.sellWidthRatio,
+        SBJ_GOLD_PRICE_GRID.rowHeightRatio,
       );
 
-      const buy = await recognizePriceCell(worker, imageBuffer, buyRect);
-      const sell = await recognizePriceCell(worker, imageBuffer, sellRect);
+      const buyResult = await recognizePriceCell(worker, imageBuffer, buyRect);
+      const sellResult = await recognizePriceCell(
+        worker,
+        imageBuffer,
+        sellRect,
+      );
 
-      if (buy == null || sell == null) continue;
+      if (SBJ_GOLD_DEBUG) {
+        console.log(
+          `[SBJ Gold] Row ${i + 1}: buy="${buyResult.text.trim()}" → ${buyResult.price}, sell="${sellResult.text.trim()}" → ${sellResult.price}`,
+        );
+      }
 
-      const rowNo = i + 1;
-      const row = { rowNo, text: "", buy, sell };
-      rowsByNumber.set(rowNo, row);
-      rows.push(row);
+      cellResults.push({ buyResult, sellResult, buyRect, sellRect });
+
+      const buy = buyResult.price;
+      const sell = sellResult.price;
+      if (buy != null && sell != null) {
+        const rowNo = i + 1;
+        const row = { rowNo, text: "", buy, sell };
+        rowsByNumber.set(rowNo, row);
+        rows.push(row);
+      }
     }
 
     // Fallback: OCR right-side columns as one block and infer ordered pairs.
@@ -260,10 +279,20 @@ async function ocrBoard(payload) {
       rows.push(...rowsByNumber.values());
     }
 
+    const debug =
+      options?.debug || SBJ_GOLD_DEBUG
+        ? {
+            imageMeta,
+            imageSize: { width, height },
+            cellResults,
+          }
+        : undefined;
+
     return {
       rowsByNumber,
       rows,
       lastUpdateText: parseLastUpdateText(payload, text, imageMeta),
+      debug,
     };
   } finally {
     await worker.terminate();
@@ -286,12 +315,13 @@ function pickRowForProduct(board, product) {
   return board.rowsByNumber.get(product.rowNo) ?? null;
 }
 
-function getBoardPromise(payload) {
-  const key = String(payload || "").slice(0, 2000);
+function getBoardPromise(payload, options = {}) {
+  const debugEnabled = options?.debug || SBJ_GOLD_DEBUG;
+  const key = `${String(payload || "").slice(0, 2000)}|debug=${debugEnabled ? 1 : 0}`;
   if (lastBoardPromise && key === lastPayloadKey) return lastBoardPromise;
 
   lastPayloadKey = key;
-  lastBoardPromise = ocrBoard(payload);
+  lastBoardPromise = ocrBoard(payload, options);
   return lastBoardPromise;
 }
 
@@ -302,13 +332,14 @@ export const SACOMBANK_SBJ_SOURCES = SACOMBANK_SBJ_PRODUCTS.map((product) => ({
   url: "https://sacombank-sbj.com/blogs/gia-vang",
   webUrl: "https://sacombank-sbj.com/blogs/gia-vang",
   location: "Toàn quốc",
-  parse: async (payload) => {
-    const board = await getBoardPromise(payload);
+  parse: async (payload, options = {}) => {
+    const board = await getBoardPromise(payload, options);
     const row = pickRowForProduct(board, product);
     return {
       buy: row?.buy ?? null,
       sell: row?.sell ?? null,
       lastUpdateText: board.lastUpdateText,
+      debug: board.debug,
     };
   },
 }));
