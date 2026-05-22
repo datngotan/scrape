@@ -6,7 +6,6 @@ import { CHAT_VE_SILVER_SOURCES } from "./sources/silver/chat_ve.js";
 import { KIM_BAO_TRI_SILVER_SOURCES } from "./sources/silver/kim_bao_tri.js";
 import { CHIEN_MINH_SOURCES } from "./sources/gold/chien_minh.js";
 import { HUONG_CHI_SOURCES } from "./sources/gold/huong_chi.js";
-import { KIM_HANH_SOURCES } from "./sources/gold/kim_hanh.js";
 import { KIM_PHU_THAI_SOURCES } from "./sources/gold/kim_phu_thai.js";
 import { MAO_THIET_SOURCES } from "./sources/gold/mao_thiet.js";
 import { LAM_NGOC_THANH_SOURCES } from "./sources/gold/lam_ngoc_thanh.js";
@@ -35,6 +34,7 @@ import { NGOC_VAN_KHOA_SOURCES } from "./sources/gold/ngoc_van_khoa.js";
 import { CASHION_SOURCES } from "./sources/gold/cashion.js";
 import { ANCARAT_SOURCES } from "./sources/gold/ancarat.js";
 import { KIM_KHANH_VIET_HUNG_SOURCES } from "./sources/gold/kim_khanh_viet_hung.js";
+import { HIEN_BINH_SOURCES } from "./sources/gold/hien_binh.js";
 
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
@@ -52,7 +52,6 @@ export const GOLD_SOURCES = [
   ...NGOC_CUA_NHA_BE_SOURCES,
   ...PHU_TAI_SOURCES,
   ...KIM_PHU_THAI_SOURCES,
-  ...KIM_HANH_SOURCES,
   ...MAO_THIET_SOURCES,
   ...LAM_NGOC_THANH_SOURCES,
   ...VIET_A_GOLD_SOURCES,
@@ -62,6 +61,7 @@ export const GOLD_SOURCES = [
   ...DAI_PHAT_VUONG_SOURCES,
   ...ANH_MINH_GOLD_SOURCES,
   ...SACOMBANK_SBJ_SOURCES,
+  ...HIEN_BINH_SOURCES,
   // ...KIM_LONG_DONG_THAP_SOURCES,
   // ...KIM_TAI_NGOC_DIAMOND_SOURCES,
   // ...KIM_BAO_TRI_SOURCES,
