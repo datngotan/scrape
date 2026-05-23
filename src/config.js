@@ -35,6 +35,7 @@ import { CASHION_SOURCES } from "./sources/gold/cashion.js";
 import { ANCARAT_SOURCES } from "./sources/gold/ancarat.js";
 import { KIM_KHANH_VIET_HUNG_SOURCES } from "./sources/gold/kim_khanh_viet_hung.js";
 import { HIEN_BINH_SOURCES } from "./sources/gold/hien_binh.js";
+import { TOAN_VUI_SOURCES } from "./sources/gold/toan_vui.js";
 
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
@@ -62,6 +63,7 @@ export const GOLD_SOURCES = [
   ...ANH_MINH_GOLD_SOURCES,
   ...SACOMBANK_SBJ_SOURCES,
   ...HIEN_BINH_SOURCES,
+  ...TOAN_VUI_SOURCES,
   // ...KIM_LONG_DONG_THAP_SOURCES,
   // ...KIM_TAI_NGOC_DIAMOND_SOURCES,
   // ...KIM_BAO_TRI_SOURCES,
