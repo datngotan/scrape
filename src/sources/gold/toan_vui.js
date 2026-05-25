@@ -19,7 +19,7 @@ const TOAN_VUI_PRODUCTS = [
   {
     id: "toan_vui_vang_10k_cn",
     name: "Toàn Vui (Vàng 10K CN)",
-    label: "vang 10k cn",
+    label: "vang 10 k cn",
   },
 ];
 

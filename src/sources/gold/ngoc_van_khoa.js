@@ -2,23 +2,23 @@ import * as cheerio from "cheerio";
 
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
-const NGOC_VAN_KHOA_URL = "https://www.vangbacdn.com/stores/ngocvankhoa";
+const NGOC_VAN_KHOA_URL = "https://ngocvankhoa.vn/";
 
 const NGOC_VAN_KHOA_PRODUCTS = [
   {
     id: "ngoc_van_khoa_vang_9999",
     name: "Ngọc Vân Khoa (Vàng 9999)",
-    label: "Vàng 9999",
+    label: "Vàng nhẫn 9999",
   },
   {
     id: "ngoc_van_khoa_vang_98",
     name: "Ngọc Vân Khoa (Vàng 98%)",
-    label: "Vàng 98%",
+    label: "Vàng nhẫn 98",
   },
   {
     id: "ngoc_van_khoa_vang_96",
     name: "Ngọc Vân Khoa (Vàng 96%)",
-    label: "Vàng 96%",
+    label: "Vàng nhẫn 96",
   },
   {
     id: "ngoc_van_khoa_nu_trang_980",
@@ -28,12 +28,12 @@ const NGOC_VAN_KHOA_PRODUCTS = [
   {
     id: "ngoc_van_khoa_vang_610",
     name: "Ngọc Vân Khoa (Vàng 610)",
-    label: "Vàng 610",
+    label: "Vàng tây 610",
   },
   {
     id: "ngoc_van_khoa_vang_10k",
     name: "Ngọc Vân Khoa (Vàng 10K)",
-    label: "Vàng 10K",
+    label: "Vàng trắng 10K",
   },
 ];
 
@@ -71,16 +71,9 @@ function extractRows(payload) {
 
     if (cells.length < 3) return;
 
-    // Page rows are typically: [label, type, buy, sell, spread].
-    // Prefer explicit buy/sell columns and keep a fallback for 3-col layouts.
-    const buy =
-      parsePriceToken(cells[2]) ??
-      parsePriceToken(cells[1]) ??
-      parsePriceToken(cells[cells.length - 2]);
-    const sell =
-      parsePriceToken(cells[3]) ??
-      parsePriceToken(cells[2]) ??
-      parsePriceToken(cells[cells.length - 1]);
+    // New site layout: [label, buy, sell] (3 columns).
+    const buy = parsePriceToken(cells[1]);
+    const sell = parsePriceToken(cells[2]);
     if (buy == null || sell == null) return;
 
     rows.push({ label: cells[0], buy, sell });
@@ -128,8 +121,7 @@ export const NGOC_VAN_KHOA_SOURCES = NGOC_VAN_KHOA_PRODUCTS.map((product) => ({
   storeName: "Ngọc Vân Khoa",
   unit: "luong",
   url: NGOC_VAN_KHOA_URL,
-  webUrl:
-    "https://www.facebook.com/p/Hi%E1%BB%87u-v%C3%A0ng-Ng%E1%BB%8Dc-V%C3%A2n-Khoa-%C4%90%C3%A0-N%E1%BA%B5ng-100070163714639/",
+  webUrl: "https://ngocvankhoa.vn/",
   location: "Đà Nẵng",
   parse: (payload) => {
     const { buy, sell } = parseByLabel(payload, product.label);
