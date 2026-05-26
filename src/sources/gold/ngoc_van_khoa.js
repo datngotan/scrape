@@ -7,17 +7,17 @@ const NGOC_VAN_KHOA_URL = "https://ngocvankhoa.vn/";
 const NGOC_VAN_KHOA_PRODUCTS = [
   {
     id: "ngoc_van_khoa_vang_9999",
-    name: "Ngọc Vân Khoa (Vàng 9999)",
+    name: "Ngọc Vân Khoa (Vàng nhẫn 9999)",
     label: "Vàng nhẫn 9999",
   },
   {
     id: "ngoc_van_khoa_vang_98",
-    name: "Ngọc Vân Khoa (Vàng 98%)",
+    name: "Ngọc Vân Khoa (Vàng nhẫn 98%)",
     label: "Vàng nhẫn 98",
   },
   {
     id: "ngoc_van_khoa_vang_96",
-    name: "Ngọc Vân Khoa (Vàng 96%)",
+    name: "Ngọc Vân Khoa (Vàng nhẫn 96%)",
     label: "Vàng nhẫn 96",
   },
   {
@@ -27,12 +27,12 @@ const NGOC_VAN_KHOA_PRODUCTS = [
   },
   {
     id: "ngoc_van_khoa_vang_610",
-    name: "Ngọc Vân Khoa (Vàng 610)",
+    name: "Ngọc Vân Khoa (Vàng tây 610)",
     label: "Vàng tây 610",
   },
   {
     id: "ngoc_van_khoa_vang_10k",
-    name: "Ngọc Vân Khoa (Vàng 10K)",
+    name: "Ngọc Vân Khoa (Vàng trắng 10K)",
     label: "Vàng trắng 10K",
   },
 ];
