@@ -60,10 +60,7 @@ function endpointForTable(tableName) {
 }
 
 function toRestPayload(row) {
-  return {
-    buy_price: String(row.buy_price),
-    sell_price: String(row.sell_price),
-  };
+  return row;
 }
 
 async function patchRowsToRestApi(tableName, rows) {
@@ -88,48 +85,59 @@ async function patchRowsToRestApi(tableName, rows) {
   const endpoint = endpointForTable(tableName);
   const base = restBaseUrl.replace(/\/+$/, "");
 
-  const patchResults = await Promise.all(
-    rows.map(async (row) => {
-      const id = encodeURIComponent(row.id);
-      const url = `${base}/rest/${endpoint}/${id}`;
+  const url = `${base}/rest/${endpoint}`;
+  const payload = rows.map((row) => toRestPayload(row));
 
-      try {
-        const response = await fetch(url, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${restToken}`,
-          },
-          body: JSON.stringify(toRestPayload(row)),
-        });
+  try {
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${restToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
-        if (!response.ok) {
-          const bodyText = await response.text().catch(() => "");
-          return {
-            ok: false,
-            id: row.id,
-            error: `HTTP ${response.status}${bodyText ? `: ${bodyText}` : ""}`,
-          };
-        }
-
-        return { ok: true, id: row.id };
-      } catch (error) {
-        return {
-          ok: false,
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      return {
+        attempted: rows.length,
+        patched: 0,
+        failed: rows.map((row) => ({
           id: row.id,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    }),
-  );
+          error: `HTTP ${response.status}${bodyText ? `: ${bodyText}` : ""}`,
+        })),
+      };
+    }
 
-  return {
-    attempted: rows.length,
-    patched: patchResults.filter((r) => r.ok).length,
-    failed: patchResults
-      .filter((r) => !r.ok)
-      .map((r) => ({ id: r.id, error: r.error })),
-  };
+    const responseBody = await response.json().catch(() => null);
+    const failed = Array.isArray(responseBody?.failed)
+      ? responseBody.failed
+          .filter((item) => item && item.id)
+          .map((item) => ({
+            id: item.id,
+            error: item.error ? String(item.error) : "Unknown error",
+          }))
+      : [];
+
+    const patched =
+      typeof responseBody?.patched === "number"
+        ? responseBody.patched
+        : rows.length - failed.length;
+
+    return {
+      attempted: rows.length,
+      patched,
+      failed,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      attempted: rows.length,
+      patched: 0,
+      failed: rows.map((row) => ({ id: row.id, error: message })),
+    };
+  }
 }
 
 async function addPriceChanges(supabase, table, rows) {
