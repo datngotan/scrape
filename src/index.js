@@ -54,6 +54,84 @@ function dedupeRowsByUpsertKey(rows) {
   return [...byKey.values()];
 }
 
+function endpointForTable(tableName) {
+  if (tableName === GOLD_TABLE) return "gold_prices";
+  return "silver_prices";
+}
+
+function toRestPayload(row) {
+  return {
+    buy_price: String(row.buy_price),
+    sell_price: String(row.sell_price),
+  };
+}
+
+async function patchRowsToRestApi(tableName, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { attempted: 0, patched: 0, failed: [] };
+  }
+
+  const restBaseUrl = (process.env.REST_SYNC_BASE_URL || "").trim();
+  const restToken = (process.env.REST_SYNC_BEARER_TOKEN || "").trim();
+
+  if (!restBaseUrl || !restToken) {
+    return {
+      attempted: rows.length,
+      patched: 0,
+      failed: rows.map((row) => ({
+        id: row.id,
+        error: "Missing REST_SYNC_BASE_URL or REST_SYNC_BEARER_TOKEN",
+      })),
+    };
+  }
+
+  const endpoint = endpointForTable(tableName);
+  const base = restBaseUrl.replace(/\/+$/, "");
+
+  const patchResults = await Promise.all(
+    rows.map(async (row) => {
+      const id = encodeURIComponent(row.id);
+      const url = `${base}/rest/${endpoint}/${id}`;
+
+      try {
+        const response = await fetch(url, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${restToken}`,
+          },
+          body: JSON.stringify(toRestPayload(row)),
+        });
+
+        if (!response.ok) {
+          const bodyText = await response.text().catch(() => "");
+          return {
+            ok: false,
+            id: row.id,
+            error: `HTTP ${response.status}${bodyText ? `: ${bodyText}` : ""}`,
+          };
+        }
+
+        return { ok: true, id: row.id };
+      } catch (error) {
+        return {
+          ok: false,
+          id: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }),
+  );
+
+  return {
+    attempted: rows.length,
+    patched: patchResults.filter((r) => r.ok).length,
+    failed: patchResults
+      .filter((r) => !r.ok)
+      .map((r) => ({ id: r.id, error: r.error })),
+  };
+}
+
 async function addPriceChanges(supabase, table, rows) {
   if (rows.length === 0) return rows;
 
@@ -99,6 +177,10 @@ async function persistRowsByTable(supabase, succeeded) {
   const tableToRows = groupSucceededRowsByTable(succeeded);
   const upsertedIds = [];
   const dbErrors = [];
+  const restSync = {
+    gold: { attempted: 0, patched: 0, failed: [] },
+    silver: { attempted: 0, patched: 0, failed: [] },
+  };
 
   for (const [table, tableRows] of tableToRows.entries()) {
     const dedupedRows = dedupeRowsByUpsertKey(tableRows);
@@ -112,10 +194,29 @@ async function persistRowsByTable(supabase, succeeded) {
     }
 
     upsertedIds.push(...buildUpsertedIdsForTable(succeeded, table));
+
+    const syncResult = await patchRowsToRestApi(table, dedupedRows);
+    if (table === GOLD_TABLE) {
+      restSync.gold = syncResult;
+    } else {
+      restSync.silver = syncResult;
+    }
+
+    if (syncResult.failed.length > 0) {
+      console.error(
+        `=== REST PATCH ERROR (${endpointForTable(table)}) ===`,
+        JSON.stringify(syncResult.failed),
+      );
+    } else if (syncResult.attempted > 0) {
+      console.log(
+        `=== REST PATCH OK (${endpointForTable(table)}) ${syncResult.patched}/${syncResult.attempted}`,
+      );
+    }
   }
 
   return {
     upsertedIds,
+    restSync,
     dbError: dbErrors.length > 0 ? dbErrors.join(" | ") : null,
   };
 }
@@ -298,6 +399,10 @@ export async function runScrapeJob(options = {}) {
 
   let dbError = null;
   const upsertedIds = [];
+  const restSync = {
+    gold: { attempted: 0, patched: 0, failed: [] },
+    silver: { attempted: 0, patched: 0, failed: [] },
+  };
   let sourceUrlCheck = {
     totalRows: 0,
     missingCount: 0,
@@ -338,6 +443,8 @@ export async function runScrapeJob(options = {}) {
       const supabase = createClient(supabaseUrl, serviceRole);
       const persisted = await persistRowsByTable(supabase, succeeded);
       upsertedIds.push(...persisted.upsertedIds);
+      restSync.gold = persisted.restSync.gold;
+      restSync.silver = persisted.restSync.silver;
       dbError = persisted.dbError;
     }
   }
@@ -358,6 +465,7 @@ export async function runScrapeJob(options = {}) {
       error: item.error,
     })),
     sourceUrlCheck,
+    restSync,
     ...(dbError ? { dbError } : {}),
   };
 
