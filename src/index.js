@@ -38,6 +38,22 @@ function buildUpsertedIdsForTable(succeeded, tableName) {
     .map((item) => `${item.id}:${item.row.unit}`);
 }
 
+function dedupeRowsByUpsertKey(rows) {
+  if (rows.length === 0) return rows;
+
+  const hasUnit = "unit" in rows[0];
+  const keyFor = (row) =>
+    hasUnit && row.unit != null ? `${row.id}:${row.unit}` : row.id;
+
+  // Keep the latest row for each logical key within this request.
+  const byKey = new Map();
+  for (const row of rows) {
+    byKey.set(keyFor(row), row);
+  }
+
+  return [...byKey.values()];
+}
+
 async function addPriceChanges(supabase, table, rows) {
   if (rows.length === 0) return rows;
 
@@ -77,6 +93,31 @@ async function addPriceChanges(supabase, table, rows) {
         : (old.sell_change ?? null),
     };
   });
+}
+
+async function persistRowsByTable(supabase, succeeded) {
+  const tableToRows = groupSucceededRowsByTable(succeeded);
+  const upsertedIds = [];
+  const dbErrors = [];
+
+  for (const [table, tableRows] of tableToRows.entries()) {
+    const dedupedRows = dedupeRowsByUpsertKey(tableRows);
+    const rowsWithChanges = await addPriceChanges(supabase, table, dedupedRows);
+
+    const { error } = await supabase.from(table).upsert(rowsWithChanges);
+    if (error) {
+      dbErrors.push(`${table}: ${error.message}`);
+      console.error("=== DB UPSERT ERROR ===", table, error.message);
+      continue;
+    }
+
+    upsertedIds.push(...buildUpsertedIdsForTable(succeeded, table));
+  }
+
+  return {
+    upsertedIds,
+    dbError: dbErrors.length > 0 ? dbErrors.join(" | ") : null,
+  };
 }
 
 function normalizeUrlForCache(rawUrl) {
@@ -265,7 +306,6 @@ export async function runScrapeJob(options = {}) {
 
   if (succeeded.length > 0 && persist) {
     const rows = succeeded.map((s) => s.row);
-    const tableToRows = groupSucceededRowsByTable(succeeded);
 
     const missingSourceUrlIds = rows
       .filter((row) => !row.source_url || !row.source_url.trim())
@@ -296,27 +336,9 @@ export async function runScrapeJob(options = {}) {
       console.error("=== DB CONFIG ERROR ===", dbError);
     } else {
       const supabase = createClient(supabaseUrl, serviceRole);
-      const dbErrors = [];
-
-      for (const [table, tableRows] of tableToRows.entries()) {
-        const rowsWithChanges = await addPriceChanges(
-          supabase,
-          table,
-          tableRows,
-        );
-        const { error } = await supabase.from(table).upsert(rowsWithChanges);
-        if (error) {
-          dbErrors.push(`${table}: ${error.message}`);
-          console.error("=== DB UPSERT ERROR ===", table, error.message);
-          continue;
-        }
-
-        upsertedIds.push(...buildUpsertedIdsForTable(succeeded, table));
-      }
-
-      if (dbErrors.length > 0) {
-        dbError = dbErrors.join(" | ");
-      }
+      const persisted = await persistRowsByTable(supabase, succeeded);
+      upsertedIds.push(...persisted.upsertedIds);
+      dbError = persisted.dbError;
     }
   }
 
