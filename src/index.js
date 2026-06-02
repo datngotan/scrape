@@ -60,7 +60,9 @@ function endpointForTable(tableName) {
 }
 
 function toRestPayload(row) {
-  return row;
+  return Object.fromEntries(
+    Object.entries(row).filter(([, value]) => value !== undefined),
+  );
 }
 
 async function patchRowsToRestApi(tableName, rows) {

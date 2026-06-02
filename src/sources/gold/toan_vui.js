@@ -37,42 +37,77 @@ function normalizeText(input) {
 }
 
 function parsePriceToken(raw) {
-  const digits = String(raw || "").replace(/[^\d]/g, "");
-  if (!digits) return null;
+  if (!raw) return null;
 
+  const text = String(raw).trim();
+  const match = text.match(/\d{1,3}(?:\.\d{3})+/);
+  if (!match) return null;
+
+  const digits = match[0].replace(/\./g, "");
   let n = Number(digits);
   if (!Number.isFinite(n) || n <= 0) return null;
 
-  // Page prices are full VND; store as thousands.
-  if (n >= 1_000_000) n = Math.round(n / 1000);
+  if (n >= 1_000_000) {
+    n = Math.round(n / 1000);
+  }
   return n;
 }
 
 function parseBuySellByLabel(payload, normalizedLabel) {
   const raw = String(payload || "");
+  if (!raw) return { buy: null, sell: null };
 
-  // Try HTML table rows first.
   const rows = raw.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+
   for (const rowHtml of rows) {
     const rowText = stripHtmlToText(rowHtml);
-    if (!normalizeText(rowText).includes(normalizedLabel)) continue;
+    const normalizedRow = normalizeText(rowText);
+
+    let isMatch = false;
+
+    // Main matching
+    if (normalizedRow.includes(normalizedLabel)) {
+      isMatch = true;
+    }
+    // Special case for first row: "V/ trang sức 24k"
+    else if (normalizedLabel.includes("vang trang suc 24k")) {
+      if (
+        normalizedRow.includes("trang suc 24k") ||
+        (normalizedRow.includes("trang suc") && normalizedRow.includes("24k"))
+      ) {
+        isMatch = true;
+      }
+    }
+
+    if (!isMatch) continue;
 
     const cells = [...rowHtml.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
-      .map((m) => stripHtmlToText(m[1]))
+      .map((m) => stripHtmlToText(m[1]).trim())
       .filter(Boolean);
+
     if (cells.length < 3) continue;
 
-    const idx = cells.findIndex((cell) =>
-      normalizeText(cell).includes(normalizedLabel),
-    );
-    if (idx < 0) continue;
+    // Find index of label cell
+    const idx = cells.findIndex((cell) => {
+      const norm = normalizeText(cell);
+      return (
+        norm.includes(normalizedLabel) ||
+        (normalizedLabel.includes("vang trang suc 24k") &&
+          (norm.includes("trang suc 24k") || norm.includes("24k")))
+      );
+    });
 
-    const buy = parsePriceToken(cells[idx + 1] ?? "");
-    const sell = parsePriceToken(cells[idx + 2] ?? "");
-    if (buy != null && sell != null) return { buy, sell };
+    if (idx < 0 || idx + 2 >= cells.length) continue;
+
+    const buy = parsePriceToken(cells[idx + 1]);
+    const sell = parsePriceToken(cells[idx + 2]);
+
+    if (buy != null && sell != null) {
+      return { buy, sell };
+    }
   }
 
-  // Fallback: markdown table lines.
+  // Markdown fallback
   const lines = raw.split(/\r?\n/);
   for (const line of lines) {
     if (!line.includes("|")) continue;
@@ -87,8 +122,8 @@ function parseBuySellByLabel(payload, normalizedLabel) {
     );
     if (idx < 0) continue;
 
-    const buy = parsePriceToken(cells[idx + 1] ?? "");
-    const sell = parsePriceToken(cells[idx + 2] ?? "");
+    const buy = parsePriceToken(cells[idx + 1]);
+    const sell = parsePriceToken(cells[idx + 2]);
     if (buy != null && sell != null) return { buy, sell };
   }
 
@@ -98,7 +133,6 @@ function parseBuySellByLabel(payload, normalizedLabel) {
 function parseTime(payload) {
   const text = stripHtmlToText(payload);
 
-  // Format: Ngày DD Tháng MM Năm YYYY | HH:MM:SS (or HH:MM)
   const m = text.match(
     /Ng[aà]y\s+(\d{1,2})\s+Th[aá]ng\s+(\d{1,2})\s+N[aă]m\s+(\d{4})[\s\S]{0,20}?(\d{1,2}):(\d{2})(?::(\d{2}))?/i,
   );
