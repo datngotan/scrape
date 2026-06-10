@@ -4,6 +4,7 @@ import { ANH_MINH_SILVER_SOURCES } from "./sources/silver/anh_minh.js";
 import { SACOMBANK_SBJ_SILVER_SOURCES } from "./sources/silver/sacombank_sbj.js";
 import { CHAT_VE_SILVER_SOURCES } from "./sources/silver/chat_ve.js";
 import { KIM_BAO_TRI_SILVER_SOURCES } from "./sources/silver/kim_bao_tri.js";
+import { BAO_TIN_MINH_CHAU_SILVER_SOURCES } from "./sources/silver/bao_tin_minh_chau.js";
 import { CHIEN_MINH_SOURCES } from "./sources/gold/chien_minh.js";
 import { HUONG_CHI_SOURCES } from "./sources/gold/huong_chi.js";
 import { KIM_PHU_THAI_SOURCES } from "./sources/gold/kim_phu_thai.js";
@@ -42,6 +43,7 @@ import { BAO_TIN_BN_SOURCES } from "./sources/gold/bao_tin_bn.js";
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
   ...HUONG_CHI_SILVER_SOURCES,
+  ...BAO_TIN_MINH_CHAU_SILVER_SOURCES,
   // ...ANH_MINH_SILVER_SOURCES,
   ...SACOMBANK_SBJ_SILVER_SOURCES,
   ...KIM_BAO_TRI_SILVER_SOURCES,
