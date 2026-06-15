@@ -26,6 +26,34 @@ export function toNumberDigits(raw) {
   return value;
 }
 
+export function toVndThousand(raw) {
+  const cleaned = String(raw || "").trim();
+  if (!cleaned) return null;
+
+  const normalized = cleaned.replace(/\s+/g, "").replace(/,/g, ".");
+
+  const withDots = normalized.match(/^\d{1,3}(?:\.\d{3})+$/);
+  if (withDots) {
+    const value = Number(normalized.replace(/\./g, ""));
+    return Number.isFinite(value) && value > 0
+      ? Math.round(value / 1000)
+      : null;
+  }
+
+  const decimal = normalized.match(/^\d+(?:\.\d+)?$/);
+  if (decimal) {
+    const value = Number(normalized);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  const digits = normalized.replace(/\D/g, "");
+  if (!digits) return null;
+
+  const value = Number(digits);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value >= 1_000_000 ? Math.round(value / 1000) : value;
+}
+
 function normalizeNeedleText(input) {
   return String(input || "")
     .toLowerCase()
