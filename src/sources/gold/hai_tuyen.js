@@ -5,11 +5,13 @@ const HAI_TUYEN_PRODUCTS = [
     id: "hai_tuyen_nhan_tron",
     name: "Hải Tuyến (Vàng nhẫn trơn)",
     label: "vang nhan tron",
+    aliases: ["vang nhan tro", "nhan tron", "nhan tro", "nhan tron tron"],
   },
   {
     id: "hai_tuyen_vang_trang_suc",
     name: "Hải Tuyến (Vàng Trang Sức)",
     label: "vang trang suc",
+    aliases: ["trang suc"],
   },
 ];
 
@@ -39,23 +41,53 @@ function parsePriceToken(raw) {
   return n;
 }
 
-function parseBuySellByLabel(payload, normalizedLabel) {
+function fuzzyTokenMatch(needle, haystack) {
+  const need = String(needle || "")
+    .split(" ")
+    .filter(Boolean);
+  const has = String(haystack || "")
+    .split(" ")
+    .filter(Boolean);
+
+  if (need.length === 0 || has.length === 0) return false;
+
+  return need.every((token) => {
+    if (token.length < 3) return has.includes(token);
+    return has.some(
+      (h) => h === token || h.startsWith(token) || token.startsWith(h),
+    );
+  });
+}
+
+function matchesAnyLabel(rawLabel, labels) {
+  const normalized = normalizeText(rawLabel);
+  if (!normalized) return false;
+
+  for (const label of labels) {
+    if (!label) continue;
+    if (normalized.includes(label) || fuzzyTokenMatch(label, normalized)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function parseBuySellByLabel(payload, labels) {
   const raw = String(payload || "");
 
   // Try HTML table rows first.
   const rows = raw.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
   for (const rowHtml of rows) {
     const rowText = stripHtmlToText(rowHtml);
-    if (!normalizeText(rowText).includes(normalizedLabel)) continue;
+    if (!matchesAnyLabel(rowText, labels)) continue;
 
     const cells = [...rowHtml.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)]
       .map((m) => stripHtmlToText(m[1]))
       .filter(Boolean);
     if (cells.length < 3) continue;
 
-    const idx = cells.findIndex((cell) =>
-      normalizeText(cell).includes(normalizedLabel),
-    );
+    const idx = cells.findIndex((cell) => matchesAnyLabel(cell, labels));
     if (idx < 0) continue;
 
     const buy = parsePriceToken(cells[idx + 1] ?? "");
@@ -73,9 +105,7 @@ function parseBuySellByLabel(payload, normalizedLabel) {
       .filter(Boolean);
     if (cells.length < 3) continue;
 
-    const idx = cells.findIndex((c) =>
-      normalizeText(c).includes(normalizedLabel),
-    );
+    const idx = cells.findIndex((c) => matchesAnyLabel(c, labels));
     if (idx < 0) continue;
 
     const buy = parsePriceToken(cells[idx + 1] ?? "");
@@ -115,7 +145,10 @@ export const HAI_TUYEN_SOURCES = HAI_TUYEN_PRODUCTS.map((product) => ({
   webUrl: HAI_TUYEN_URL,
   location: "Phú Thọ",
   parse: (payload) => {
-    const { buy, sell } = parseBuySellByLabel(payload, product.label);
+    const labels = [product.label, ...(product.aliases ?? [])].map((value) =>
+      normalizeText(value),
+    );
+    const { buy, sell } = parseBuySellByLabel(payload, labels);
     return {
       buy,
       sell,

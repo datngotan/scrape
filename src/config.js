@@ -40,6 +40,7 @@ import { TOAN_VUI_SOURCES } from "./sources/gold/toan_vui.js";
 import { HAI_TUYEN_SOURCES } from "./sources/gold/hai_tuyen.js";
 import { BAO_TIN_BN_SOURCES } from "./sources/gold/bao_tin_bn.js";
 import { HIEU_VANG_TRU_SOURCES } from "./sources/gold/hieu_vang_tru.js";
+import { PHUC_THANH_SOURCES } from "./sources/gold/phuc_thanh.js";
 
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
@@ -59,6 +60,7 @@ export const GOLD_SOURCES = [
   ...HAI_TUYEN_SOURCES,
   ...BAO_TIN_BN_SOURCES,
   ...HIEU_VANG_TRU_SOURCES,
+  ...PHUC_THANH_SOURCES,
   ...KIM_LONG_DONG_THAP_SOURCES,
   ...NGOC_VAN_KHOA_SOURCES,
 ];
