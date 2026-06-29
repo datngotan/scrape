@@ -27,11 +27,6 @@ const HIEN_BINH_PRODUCTS = [
     label: "vang 610",
   },
   {
-    id: "hien_binh_vang_14k",
-    name: "Hiền Bình (Vàng 14K)",
-    label: "vang 14k",
-  },
-  {
     id: "hien_binh_vang_10k",
     name: "Hiền Bình (Vàng 10K)",
     label: "vang 10k",
