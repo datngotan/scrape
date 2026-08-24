@@ -11,26 +11,26 @@ const HIEN_BINH_PRODUCTS = [
     name: "Hiền Bình (Vàng 23K)",
     label: "vang 23k",
   },
-  {
-    id: "hien_binh_vang_18k",
-    name: "Hiền Bình (Vàng 18K)",
-    label: "vang 18k",
-  },
-  {
-    id: "hien_binh_vang_650",
-    name: "Hiền Bình (Vàng 650)",
-    label: "vang 650",
-  },
-  {
-    id: "hien_binh_vang_610",
-    name: "Hiền Bình (Vàng 610)",
-    label: "vang 610",
-  },
-  {
-    id: "hien_binh_vang_10k",
-    name: "Hiền Bình (Vàng 10K)",
-    label: "vang 10k",
-  },
+  // {
+  //   id: "hien_binh_vang_18k",
+  //   name: "Hiền Bình (Vàng 18K)",
+  //   label: "vang 18k",
+  // },
+  // {
+  //   id: "hien_binh_vang_650",
+  //   name: "Hiền Bình (Vàng 650)",
+  //   label: "vang 650",
+  // },
+  // {
+  //   id: "hien_binh_vang_610",
+  //   name: "Hiền Bình (Vàng 610)",
+  //   label: "vang 610",
+  // },
+  // {
+  //   id: "hien_binh_vang_10k",
+  //   name: "Hiền Bình (Vàng 10K)",
+  //   label: "vang 10k",
+  // },
 ];
 
 const HIEN_BINH_URL =

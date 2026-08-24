@@ -19,16 +19,16 @@ const PRODUCTS = [
     name: "Hiệu Vàng Trữ (Vàng Nữ trang 98%)",
     needle: "Vàng Nữ trang 98%",
   },
-  {
-    id: "hieu_vang_tru_vang_610",
-    name: "Hiệu Vàng Trữ (Vàng 610)",
-    needle: "Vàng 610",
-  },
-  {
-    id: "hieu_vang_tru_vang_416_pnj",
-    name: "Hiệu Vàng Trữ (Vàng 416 PNJ)",
-    needle: "Vàng 416 PNJ",
-  },
+  // {
+  //   id: "hieu_vang_tru_vang_610",
+  //   name: "Hiệu Vàng Trữ (Vàng 610)",
+  //   needle: "Vàng 610",
+  // },
+  // {
+  //   id: "hieu_vang_tru_vang_416_pnj",
+  //   name: "Hiệu Vàng Trữ (Vàng 416 PNJ)",
+  //   needle: "Vàng 416 PNJ",
+  // },
 ];
 
 function normalizeText(input) {

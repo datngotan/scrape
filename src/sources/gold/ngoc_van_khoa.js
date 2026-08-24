@@ -25,16 +25,16 @@ const NGOC_VAN_KHOA_PRODUCTS = [
     name: "Ngọc Vân Khoa (Nữ trang 980)",
     label: "Nữ trang 980",
   },
-  {
-    id: "ngoc_van_khoa_vang_610",
-    name: "Ngọc Vân Khoa (Vàng tây 610)",
-    label: "Vàng tây 610",
-  },
-  {
-    id: "ngoc_van_khoa_vang_10k",
-    name: "Ngọc Vân Khoa (Vàng trắng 10K)",
-    label: "Vàng trắng 10K",
-  },
+  // {
+  //   id: "ngoc_van_khoa_vang_610",
+  //   name: "Ngọc Vân Khoa (Vàng tây 610)",
+  //   label: "Vàng tây 610",
+  // },
+  // {
+  //   id: "ngoc_van_khoa_vang_10k",
+  //   name: "Ngọc Vân Khoa (Vàng trắng 10K)",
+  //   label: "Vàng trắng 10K",
+  // },
 ];
 
 function normalizeText(input) {

@@ -21,24 +21,6 @@ const KIM_LONG_PRODUCTS = [
     infoId: 8,
     unit: "luong",
   },
-  {
-    id: "kim_long_dong_thap_nu_trang_cao_cap_18k",
-    name: "Kim Long Đồng Tháp (Nữ trang cao cấp 18K)",
-    infoId: 3,
-    unit: "luong",
-  },
-  {
-    id: "kim_long_dong_thap_nu_trang_cong_ty_610",
-    name: "Kim Long Đồng Tháp (Nữ trang công ty 610)",
-    infoId: 4,
-    unit: "luong",
-  },
-  {
-    id: "kim_long_dong_thap_nu_trang_cong_ty_600",
-    name: "Kim Long Đồng Tháp (Nữ trang công ty 600)",
-    infoId: 5,
-    unit: "luong",
-  },
 ];
 
 let lastPayloadKey = "";
