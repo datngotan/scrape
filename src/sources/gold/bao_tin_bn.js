@@ -16,11 +16,11 @@ const BAO_TIN_BN_PRODUCTS = [
     name: "Bảo Tín BN (Vàng ta trang sức)",
     label: "vang ta trang suc",
   },
-  {
-    id: "bao_tin_bn_vang_10k",
-    name: "Bảo Tín BN (Vàng 10K)",
-    label: "vang 10k",
-  },
+  // {
+  //   id: "bao_tin_bn_vang_10k",
+  //   name: "Bảo Tín BN (Vàng 10K)",
+  //   label: "vang 10k",
+  // },
 ];
 
 const BAO_TIN_BN_URL =
