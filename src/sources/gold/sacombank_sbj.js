@@ -74,35 +74,121 @@ function resolveImageUrl(baseUrl, rawSrc) {
   }
 }
 
-function pickLatestBoardImage(payload) {
+// The page lists the SILVER board first and the GOLD board second, and the
+// alt text is unreliable (both say "Vàng"). The gold board is the tall one
+// (aspect ratio ~1.34) while the silver board is wide (~1.81). Pick the board
+// whose aspect ratio matches the gold layout.
+const GOLD_BOARD_ASPECT = 1.34;
+const BOARD_ASPECT_TOLERANCE = 0.25;
+
+async function fetchImageAspect(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const meta = await sharp(buf).metadata();
+    if (!meta.width || !meta.height) return null;
+    return {
+      aspect: meta.width / meta.height,
+      buffer: buf,
+      width: meta.width,
+      height: meta.height,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function pickLatestBoardImage(payload) {
   const html = String(payload || "");
   const $ = cheerio.load(html);
 
-  let first = null;
+  const candidates = [];
   $("img").each((_, el) => {
-    if (first) return;
     const src = resolveImageUrl("https://sacombank-sbj.com", $(el).attr("src"));
     if (!src) return;
-    if (!src.includes("cdn.hstatic.net/files/200000315699/article/")) return;
-
+    // Board images are served from both /article/ (older boards) and /file/
+    // (the current board, injected by JS). Accept either.
+    if (!src.includes("cdn.hstatic.net/files/200000315699/")) return;
+    if (
+      !/[/_](article|file)\//.test(src) &&
+      !src.includes("/article/") &&
+      !src.includes("/file/")
+    )
+      return;
     const alt = $(el).attr("alt") || "";
-    const url = src.replace(/_medium(?=\.[a-z]+$)/i, "");
-    first = { url, alt };
+    const url = src.replace(/_(medium|1024x1024)(?=\.[a-z]+$)/i, "");
+    candidates.push({ url, alt });
   });
 
-  return first;
+  let fallback = null;
+  for (const candidate of candidates) {
+    const info = await fetchImageAspect(candidate.url);
+    if (!info) continue;
+    if (!fallback) fallback = { ...candidate, ...info };
+    if (Math.abs(info.aspect - GOLD_BOARD_ASPECT) <= BOARD_ASPECT_TOLERANCE) {
+      return { ...candidate, ...info };
+    }
+  }
+  return fallback;
+}
+
+function isValidDate(dd, mm) {
+  const d = Number(dd);
+  const m = Number(mm);
+  return d >= 1 && d <= 31 && m >= 1 && m <= 12;
+}
+
+function findValidDates(text) {
+  const matches = [];
+  const re = /(\d{1,2})\/(\d{1,2})\/(\d{4})/g;
+  let m;
+  const src = String(text || "");
+  while ((m = re.exec(src)) !== null) {
+    if (isValidDate(m[1], m[2])) {
+      matches.push({ dd: m[1], mm: m[2], yyyy: m[3], index: m.index });
+    }
+  }
+  return matches;
 }
 
 function parseLastUpdateText(payload, ocrText, imageMeta) {
-  const source = `${String(imageMeta?.alt || "")}\n${String(ocrText || "")}\n${String(payload || "")}`;
+  const payloadText = String(payload || "");
+  const ocrDates = findValidDates(ocrText);
+  const payloadDates = findValidDates(payloadText);
 
-  const dateMatch = source.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!dateMatch) return nowVnText();
+  let chosen = null;
 
-  const dd = dateMatch[1].padStart(2, "0");
-  const mm = dateMatch[2].padStart(2, "0");
-  const yyyy = dateMatch[3];
+  // Prefer the payload date closest to the gold board image URL.
+  if (imageMeta?.url && payloadDates.length > 0) {
+    const imgKey = imageMeta.url.replace(/^https?:/, "").replace(/^\/\//, "");
+    const imgIdx = payloadText.indexOf(imgKey);
+    if (imgIdx >= 0) {
+      chosen = payloadDates.reduce((best, cur) =>
+        Math.abs(cur.index - imgIdx) < Math.abs(best.index - imgIdx)
+          ? cur
+          : best,
+      );
+    }
+  }
 
+  // Then prefer a date from the board OCR (the header shows "ngày DD/MM/YYYY").
+  if (!chosen && ocrDates.length > 0) chosen = ocrDates[0];
+  // Then any valid payload date.
+  if (!chosen && payloadDates.length > 0) chosen = payloadDates[0];
+  // Then any valid date in the alt text.
+  if (!chosen) {
+    const altDates = findValidDates(imageMeta?.alt);
+    if (altDates.length > 0) chosen = altDates[0];
+  }
+
+  if (!chosen) return nowVnText();
+
+  const dd = chosen.dd.padStart(2, "0");
+  const mm = chosen.mm.padStart(2, "0");
+  const yyyy = chosen.yyyy;
+
+  const source = `${String(imageMeta?.alt || "")}\n${String(ocrText || "")}\n${payloadText}`;
   const hourMatch = source.match(/(\d{1,2})h(\d{2})/i);
   if (hourMatch) {
     const HH = hourMatch[1].padStart(2, "0");
@@ -170,7 +256,7 @@ async function recognizePriceCell(worker, imageBuffer, rect) {
 }
 
 async function ocrBoard(payload, options = {}) {
-  const imageMeta = pickLatestBoardImage(payload);
+  const imageMeta = await pickLatestBoardImage(payload);
   if (!imageMeta?.url) {
     return {
       rowsByNumber: new Map(),
@@ -179,10 +265,13 @@ async function ocrBoard(payload, options = {}) {
     };
   }
 
-  const imageBuffer = Buffer.from(
-    await (await fetch(imageMeta.url)).arrayBuffer(),
-  );
-  const { width, height } = await sharp(imageBuffer).metadata();
+  // Reuse the buffer/metadata already fetched by pickLatestBoardImage when
+  // available; otherwise fetch fresh.
+  const imageBuffer =
+    imageMeta.buffer ??
+    Buffer.from(await (await fetch(imageMeta.url)).arrayBuffer());
+  const width = imageMeta.width;
+  const height = imageMeta.height;
 
   const worker = await createWorker("eng");
   try {
