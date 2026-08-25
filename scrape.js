@@ -23,9 +23,9 @@ async function executeJob() {
 executeJob();
 
 // Run every 5 minutes
-setInterval(
-  () => {
-    executeJob();
-  },
-  5 * 60 * 1000
-);
+// setInterval(
+//   () => {
+//     executeJob();
+//   },
+//   5 * 60 * 1000
+// );

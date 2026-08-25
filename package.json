@@ -9,5 +9,11 @@
     "playwright": "^1.42.0",
     "sharp": "^0.34.4",
     "tesseract.js": "^6.0.1"
+  },
+  "scripts": {
+    "start": "node scrape.js",
+    "cron:install": "bash scripts/install-cron.sh",
+    "cron:remove": "bash scripts/remove-cron.sh",
+    "cron:status": "crontab -l 2>/dev/null | grep -A3 'tich-chi-scrape-cron' || echo 'cron job not installed'"
   }
 }
