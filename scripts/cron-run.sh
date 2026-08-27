@@ -4,7 +4,9 @@
 
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
+cd / || exit 1
+ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT" || exit 1
 
 NODE="${NODE_BIN:-node}"
@@ -19,7 +21,7 @@ if [ "$HOUR" -lt 7 ] || [ "$HOUR" -ge 22 ]; then
   exit 0
 fi
 
-OUTPUT="$("$NODE" scrape.js 2>&1)"
+OUTPUT="$("$NODE" "$ROOT/scrape.js" 2>&1)"
 EXIT_CODE=$?
 
 if [ "$EXIT_CODE" -eq 0 ]; then
@@ -38,15 +40,22 @@ process.stdin.on('data', (c) => (raw += c)).on('end', () => {
   try {
     const s = JSON.parse(raw.slice(start, end + 1));
     const ok = (s.upserted || []).length;
-    const failed = (s.failed || []).length;
-    const skipped = (s.skipped || []).length;
-    console.log(\`sources: \${ok} succeeded, \${failed} failed, \${skipped} skipped\`);
+    const failed = s.failed || [];
+    const skipped = s.skipped || [];
+    console.log(\`sources: \${ok} succeeded, \${failed.length} failed, \${skipped.length} skipped\`);
+    for (const item of failed) {
+      console.log(\`failed: \${item.id} [\${item.stage}] - \${item.error}\`);
+    }
+    for (const item of skipped) {
+      console.log(\`skipped: \${item.id} [\${item.reason}]\`);
+    }
   } catch {}
 });
 " 2>/dev/null)"
 
 {
-  echo "[$NOW Asia/Ho_Chi_Minh] $STATUS (exit=$EXIT_CODE) - node scrape.js${COUNTS:+ - $COUNTS}"
+  echo "[$NOW Asia/Ho_Chi_Minh] $STATUS (exit=$EXIT_CODE) - node scrape.js"
+  printf '%s\n' "$COUNTS" | sed 's/^/    /'
   echo "$OUTPUT" | tail -n 5 | sed 's/^/    /'
 } >> "$STATUS_FILE"
 
