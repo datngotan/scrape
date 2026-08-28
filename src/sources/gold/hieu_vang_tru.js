@@ -12,7 +12,7 @@ const PRODUCTS = [
   {
     id: "hieu_vang_tru_vang_98",
     name: "Hiệu Vàng Trữ (Vàng 98%)",
-    needle: "Vàng 98%",
+    needle: ["Vàng 98%", "Vàng 98%12"],
   },
   {
     id: "hieu_vang_tru_vang_nu_trang_98",
@@ -63,7 +63,9 @@ function parsePriceCell(cell) {
 
 function parseByNeedle(payload, needle) {
   const trMatches = String(payload || "").match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
-  const target = normalizeText(needle);
+  const targets = new Set(
+    (Array.isArray(needle) ? needle : [needle]).map(normalizeText),
+  );
 
   for (const tr of trMatches) {
     const cells = [...tr.matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi)]
@@ -73,7 +75,7 @@ function parseByNeedle(payload, needle) {
     if (cells.length < 3) continue;
 
     const label = normalizeText(cells[0]);
-    if (label !== target) continue;
+    if (!targets.has(label)) continue;
 
     // API table columns are: name | sell | buy
     return {
