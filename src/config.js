@@ -3,7 +3,6 @@ import { HUONG_CHI_SILVER_SOURCES } from "./sources/silver/huong_chi.js";
 import { ANH_MINH_SILVER_SOURCES } from "./sources/silver/anh_minh.js";
 import { SACOMBANK_SBJ_SILVER_SOURCES } from "./sources/silver/sacombank_sbj.js";
 import { CHAT_VE_SILVER_SOURCES } from "./sources/silver/chat_ve.js";
-import { KIM_BAO_TRI_SILVER_SOURCES } from "./sources/silver/kim_bao_tri.js";
 import { BAO_TIN_MINH_CHAU_SILVER_SOURCES } from "./sources/silver/bao_tin_minh_chau.js";
 import { DOJI_SILVER_SOURCES } from "./sources/silver/doji.js";
 import { CHIEN_MINH_SOURCES } from "./sources/gold/chien_minh.js";
@@ -50,7 +49,6 @@ export const SILVER_SOURCES = [
   ...DOJI_SILVER_SOURCES,
   // ...ANH_MINH_SILVER_SOURCES,
   ...SACOMBANK_SBJ_SILVER_SOURCES,
-  ...KIM_BAO_TRI_SILVER_SOURCES,
   // ...CHAT_VE_SILVER_SOURCES,
 ];
 export const GOLD_SOURCES = [
