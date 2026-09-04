@@ -7,7 +7,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MARKER="tich-chi-scrape-cron"
 
-NODE_BIN="$(command -v node || true)"
+# Prefer stable, well-known install locations over a bare `command -v node`
+# lookup: some shells (e.g. certain terminal integrations) put a
+# session-only shim ahead in PATH (like
+# /private/var/folders/.../T/xfs-XXXXXXXX/node), which stops existing as
+# soon as that session ends. Cron then fails with "No such file or
+# directory". Only fall back to `command -v node` if none of the common
+# stable locations exist.
+resolve_node() {
+  for candidate in /usr/local/bin/node /opt/homebrew/bin/node /usr/bin/node; do
+    if [ -x "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  command -v node || true
+}
+
+NODE_BIN="$(resolve_node)"
 if [ -z "$NODE_BIN" ]; then
   echo "Error: node not found in PATH" >&2
   exit 1

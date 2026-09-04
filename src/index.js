@@ -4,6 +4,10 @@ import { GOLD_TABLE, SOURCES, tableForSourceId } from "./config.js";
 import { fetchHtml } from "./fetch.js";
 import { buildRowOrNull } from "./row.js";
 
+// ---------------------------------------------------------------------------
+// Row / table grouping helpers
+// ---------------------------------------------------------------------------
+
 const TABLE_ROW_TRANSFORMERS = new Map([
   [
     GOLD_TABLE,
@@ -32,27 +36,37 @@ function groupSucceededRowsByTable(succeeded) {
   return tableToRows;
 }
 
-function buildUpsertedIdsForTable(succeeded, tableName) {
+// Only the rows whose key is present in `changedKeys` were actually written
+// to the DB, so the summary should reflect exactly those, not every
+// succeeded source.
+function buildUpsertedIdsForTable(succeeded, tableName, changedKeys, hasUnit) {
   return succeeded
     .filter((item) => tableForSourceId(item.id) === tableName)
+    .filter((item) => changedKeys.has(makeRowKey(item.row, hasUnit)))
     .map((item) => `${item.id}:${item.row.unit}`);
+}
+
+function makeRowKey(row, hasUnit) {
+  return hasUnit && row.unit != null ? `${row.id}:${row.unit}` : row.id;
 }
 
 function dedupeRowsByUpsertKey(rows) {
   if (rows.length === 0) return rows;
 
-  const hasUnit = "unit" in rows[0];
-  const keyFor = (row) =>
-    hasUnit && row.unit != null ? `${row.id}:${row.unit}` : row.id;
+  const hasUnit = rows.some((row) => "unit" in row);
 
   // Keep the latest row for each logical key within this request.
   const byKey = new Map();
   for (const row of rows) {
-    byKey.set(keyFor(row), row);
+    byKey.set(makeRowKey(row, hasUnit), row);
   }
 
   return [...byKey.values()];
 }
+
+// ---------------------------------------------------------------------------
+// REST sync (patches upserted rows to an external REST API)
+// ---------------------------------------------------------------------------
 
 function endpointForTable(tableName) {
   if (tableName === GOLD_TABLE) return "gold_prices";
@@ -65,23 +79,31 @@ function toRestPayload(row) {
   );
 }
 
+function emptyRestSyncResult() {
+  return { attempted: 0, patched: 0, failed: [] };
+}
+
+function buildAllFailedRestSyncResult(rows, errorMessage) {
+  return {
+    attempted: rows.length,
+    patched: 0,
+    failed: rows.map((row) => ({ id: row.id, error: errorMessage })),
+  };
+}
+
 async function patchRowsToRestApi(tableName, rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return { attempted: 0, patched: 0, failed: [] };
+    return emptyRestSyncResult();
   }
 
   const restBaseUrl = (process.env.REST_SYNC_BASE_URL || "").trim();
   const restToken = (process.env.REST_SYNC_BEARER_TOKEN || "").trim();
 
   if (!restBaseUrl || !restToken) {
-    return {
-      attempted: rows.length,
-      patched: 0,
-      failed: rows.map((row) => ({
-        id: row.id,
-        error: "Missing REST_SYNC_BASE_URL or REST_SYNC_BEARER_TOKEN",
-      })),
-    };
+    return buildAllFailedRestSyncResult(
+      rows,
+      "Missing REST_SYNC_BASE_URL or REST_SYNC_BEARER_TOKEN",
+    );
   }
 
   const endpoint = endpointForTable(tableName);
@@ -102,14 +124,10 @@ async function patchRowsToRestApi(tableName, rows) {
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
-      return {
-        attempted: rows.length,
-        patched: 0,
-        failed: rows.map((row) => ({
-          id: row.id,
-          error: `HTTP ${response.status}${bodyText ? `: ${bodyText}` : ""}`,
-        })),
-      };
+      return buildAllFailedRestSyncResult(
+        rows,
+        `HTTP ${response.status}${bodyText ? `: ${bodyText}` : ""}`,
+      );
     }
 
     const responseBody = await response.json().catch(() => null);
@@ -134,44 +152,119 @@ async function patchRowsToRestApi(tableName, rows) {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return {
-      attempted: rows.length,
-      patched: 0,
-      failed: rows.map((row) => ({ id: row.id, error: message })),
-    };
+    return buildAllFailedRestSyncResult(rows, message);
   }
 }
 
-async function addPriceChanges(supabase, table, rows) {
-  if (rows.length === 0) return rows;
+// ---------------------------------------------------------------------------
+// Supabase persistence
+// ---------------------------------------------------------------------------
+
+// Fields that represent the actual scraped data. A row is only considered
+// "changed" (and therefore worth writing) when one of these differs from
+// what's already stored. `updated_at` is deliberately excluded because it is
+// always the current timestamp and would otherwise make every row look
+// changed on every run.
+const COMPARABLE_ROW_FIELDS = [
+  "buy_price",
+  "sell_price",
+  "store_name",
+  "source_name",
+  "source_url",
+  "location",
+];
+
+function diffRowFields(row, old) {
+  const changes = [];
+  for (const field of COMPARABLE_ROW_FIELDS) {
+    if (row[field] !== old[field]) {
+      changes.push({ field, oldValue: old[field], newValue: row[field] });
+    }
+  }
+  return changes;
+}
+
+function formatChangeValue(value) {
+  return value === undefined ? "undefined" : JSON.stringify(value);
+}
+
+function logRowChanges(table, changeLogs) {
+  for (const entry of changeLogs) {
+    if (entry.isNew) {
+      console.log(`=== NEW ROW [Table: ${table}, Key: ${entry.key}] ===`);
+      continue;
+    }
+
+    console.log(`=== CHANGE DETECTED [Table: ${table}, Key: ${entry.key}] ===`);
+    for (const { field, oldValue, newValue } of entry.fields) {
+      console.log(
+        `  ${field}: ${formatChangeValue(oldValue)} -> ${formatChangeValue(newValue)}`,
+      );
+    }
+  }
+}
+
+// Compares incoming rows against what's currently stored and returns only the
+// rows that actually need to be written (new rows, or rows with at least one
+// changed field from COMPARABLE_ROW_FIELDS). Also computes buy_change/
+// sell_change and collects human-readable change logs for auditing.
+async function analyzeRowChanges(supabase, table, rows, hasUnit) {
+  if (rows.length === 0) {
+    return { rowsToUpsert: [], changedKeys: new Set(), changeLogs: [] };
+  }
 
   const ids = [...new Set(rows.map((r) => r.id))];
-  const hasUnit = "unit" in rows[0];
-
   const selectCols =
-    "id, buy_price, sell_price, buy_change, sell_change" +
+    "id, buy_price, sell_price, buy_change, sell_change, store_name, source_name, source_url, location" +
     (hasUnit ? ", unit" : "");
   const { data: existing, error } = await supabase
     .from(table)
     .select(selectCols)
     .in("id", ids);
 
-  if (error || !existing) return rows;
+  if (error || !existing) {
+    // Unknown prior state: treat every row as changed so nothing is silently
+    // dropped.
+    const changedKeys = new Set(rows.map((row) => makeRowKey(row, hasUnit)));
+    const rowsToUpsert = rows.map((row) => ({
+      ...row,
+      buy_change: null,
+      sell_change: null,
+    }));
+    return { rowsToUpsert, changedKeys, changeLogs: [] };
+  }
 
-  const makeKey = (r) =>
-    hasUnit && r.unit != null ? `${r.id}:${r.unit}` : r.id;
-  const existingMap = new Map(existing.map((r) => [makeKey(r), r]));
+  const existingMap = new Map(existing.map((r) => [makeRowKey(r, hasUnit), r]));
 
-  return rows.map((row) => {
-    const old = existingMap.get(makeKey(row));
+  const changedKeys = new Set();
+  const changeLogs = [];
+  const rowsToUpsert = [];
+
+  for (const row of rows) {
+    const key = makeRowKey(row, hasUnit);
+    const old = existingMap.get(key);
+
     if (!old) {
-      return { ...row, buy_change: null, sell_change: null };
+      changedKeys.add(key);
+      changeLogs.push({ key, isNew: true, fields: [] });
+      rowsToUpsert.push({ ...row, buy_change: null, sell_change: null });
+      continue;
     }
+
+    const fieldChanges = diffRowFields(row, old);
+    if (fieldChanges.length === 0) {
+      // Identical to what's stored: skip this row entirely (no DB write, no
+      // REST sync).
+      continue;
+    }
+
+    changedKeys.add(key);
+    changeLogs.push({ key, isNew: false, fields: fieldChanges });
 
     const buyChanged = row.buy_price !== old.buy_price;
     const sellChanged = row.sell_price !== old.sell_price;
 
-    return {
+    rowsToUpsert.push({
       ...row,
       buy_change: buyChanged
         ? row.buy_price - old.buy_price
@@ -179,8 +272,10 @@ async function addPriceChanges(supabase, table, rows) {
       sell_change: sellChanged
         ? row.sell_price - old.sell_price
         : (old.sell_change ?? null),
-    };
-  });
+    });
+  }
+
+  return { rowsToUpsert, changedKeys, changeLogs };
 }
 
 async function persistRowsByTable(supabase, succeeded) {
@@ -188,24 +283,63 @@ async function persistRowsByTable(supabase, succeeded) {
   const upsertedIds = [];
   const dbErrors = [];
   const restSync = {
-    gold: { attempted: 0, patched: 0, failed: [] },
-    silver: { attempted: 0, patched: 0, failed: [] },
+    gold: emptyRestSyncResult(),
+    silver: emptyRestSyncResult(),
   };
+  const changeSummary = { changed: 0, unchanged: 0 };
 
   for (const [table, tableRows] of tableToRows.entries()) {
     const dedupedRows = dedupeRowsByUpsertKey(tableRows);
-    const rowsWithChanges = await addPriceChanges(supabase, table, dedupedRows);
+    // Check every row, not just the first: a table whose rows are ever a mix
+    // of "has unit" / "no unit" would otherwise get inconsistent row keys,
+    // which can cause a real change to miss its prior row in `existingMap`
+    // (it still gets written, but is silently misclassified as "new" instead
+    // of "changed", losing the diff log and buy_change/sell_change delta).
+    const hasUnit = dedupedRows.some((row) => "unit" in row);
 
-    const { error } = await supabase.from(table).upsert(rowsWithChanges);
-    if (error) {
-      dbErrors.push(`${table}: ${error.message}`);
-      console.error("=== DB UPSERT ERROR ===", table, error.message);
+    const { rowsToUpsert, changedKeys, changeLogs } = await analyzeRowChanges(
+      supabase,
+      table,
+      dedupedRows,
+      hasUnit,
+    );
+
+    logRowChanges(table, changeLogs);
+
+    changeSummary.changed += rowsToUpsert.length;
+    changeSummary.unchanged += dedupedRows.length - rowsToUpsert.length;
+
+    if (rowsToUpsert.length === 0) {
+      console.log(
+        `=== SUPABASE UPSERT SKIPPED [Table: ${table}] no changes detected (${dedupedRows.length} row(s) unchanged) ===`,
+      );
       continue;
     }
 
-    upsertedIds.push(...buildUpsertedIdsForTable(succeeded, table));
+    const { error } = await supabase.from(table).upsert(rowsToUpsert);
+    if (error) {
+      dbErrors.push(`${table}: ${error.message}`);
+      console.error(
+        `=== SUPABASE UPSERT ERROR [Table: ${table}] ===`,
+        error.message,
+      );
+      continue;
+    }
 
-    const syncResult = await patchRowsToRestApi(table, dedupedRows);
+    upsertedIds.push(
+      ...buildUpsertedIdsForTable(succeeded, table, changedKeys, hasUnit),
+    );
+
+    // Only the rows we just upserted (i.e. rows that actually changed) need
+    // to be synced to the REST API — no separate filtering needed.
+    let syncResult;
+    try {
+      syncResult = await patchRowsToRestApi(table, rowsToUpsert);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      syncResult = buildAllFailedRestSyncResult(rowsToUpsert, message);
+    }
+
     if (table === GOLD_TABLE) {
       restSync.gold = syncResult;
     } else {
@@ -214,22 +348,31 @@ async function persistRowsByTable(supabase, succeeded) {
 
     if (syncResult.failed.length > 0) {
       console.error(
-        `=== REST PATCH ERROR (${endpointForTable(table)}) ===`,
-        JSON.stringify(syncResult.failed),
+        `=== REST API PATCH ERROR [Table: ${table}, Endpoint: ${endpointForTable(table)}] ===`,
+        JSON.stringify(syncResult.failed, null, 2),
       );
     } else if (syncResult.attempted > 0) {
       console.log(
-        `=== REST PATCH OK (${endpointForTable(table)}) ${syncResult.patched}/${syncResult.attempted}`,
+        `=== REST API PATCH OK [Table: ${table}, Endpoint: ${endpointForTable(table)}] ${syncResult.patched}/${syncResult.attempted}`,
       );
     }
   }
 
+  console.log(
+    `=== CHANGE SUMMARY === changed=${changeSummary.changed} unchanged=${changeSummary.unchanged}`,
+  );
+
   return {
     upsertedIds,
     restSync,
+    changeSummary,
     dbError: dbErrors.length > 0 ? dbErrors.join(" | ") : null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Source fetching / parsing
+// ---------------------------------------------------------------------------
 
 function normalizeUrlForCache(rawUrl) {
   const trimmed = String(rawUrl || "").trim();
@@ -250,6 +393,18 @@ function normalizeUrlForCache(rawUrl) {
   }
 }
 
+function buildFailedSourceResult(source, stage, errorMessage) {
+  return {
+    status: "failed",
+    id: source.id,
+    name: source.name,
+    storeName: source.storeName,
+    url: source.webUrl ?? source.url,
+    stage,
+    error: errorMessage,
+  };
+}
+
 async function processSource(source, getSharedPayload) {
   const TIMEOUT_MS = 100_000;
 
@@ -268,50 +423,30 @@ async function processSource(source, getSharedPayload) {
         try {
           payload = await getSharedPayload(source);
         } catch (error) {
-          const displayUrl = source.webUrl ?? source.url;
-          return {
-            status: "failed",
-            id: source.id,
-            url: displayUrl,
-            stage: "fetch",
-            error: String(error),
-          };
+          return buildFailedSourceResult(source, "fetch", String(error));
         }
 
         let parsed;
         try {
           parsed = await source.parse(payload);
         } catch (error) {
-          const displayUrl = source.webUrl ?? source.url;
-          return {
-            status: "failed",
-            id: source.id,
-            url: displayUrl,
-            stage: "parse",
-            error: String(error),
-          };
+          return buildFailedSourceResult(source, "parse", String(error));
         }
 
         let row;
         try {
           row = buildRowOrNull(source, parsed);
         } catch (error) {
-          const displayUrl = source.webUrl ?? source.url;
-          return {
-            status: "failed",
-            id: source.id,
-            url: displayUrl,
-            stage: "build",
-            error: String(error),
-          };
+          return buildFailedSourceResult(source, "build", String(error));
         }
 
         if (!row) {
-          const displayUrl = source.webUrl ?? source.url;
           return {
             status: "skipped",
             id: source.id,
-            url: displayUrl,
+            name: source.name,
+            storeName: source.storeName,
+            url: source.webUrl ?? source.url,
             reason: "null_prices",
             parsed: {
               buy: parsed.buy ?? null,
@@ -325,6 +460,7 @@ async function processSource(source, getSharedPayload) {
         return {
           status: "ok",
           id: source.id,
+          name: source.name,
           row,
         };
       })(),
@@ -333,16 +469,103 @@ async function processSource(source, getSharedPayload) {
 
     return result;
   } catch (error) {
-    const displayUrl = source.webUrl ?? source.url;
-    return {
-      status: "failed",
-      id: source.id,
-      url: displayUrl,
-      stage: "timeout",
-      error: error instanceof Error ? error.message : String(error),
-    };
+    const message = error instanceof Error ? error.message : String(error);
+    return buildFailedSourceResult(source, "timeout", message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Run summary logging / checks
+// ---------------------------------------------------------------------------
+
+// Groups every result by store and reports, at the store level, how many
+// stores are fully OK vs. how many have at least one failed product. Each
+// failed store is logged as a single line listing its failed products, so
+// the failure surface is scannable at a glance instead of two log lines per
+// failed product.
+function summarizeByStore(succeeded, skipped, failed) {
+  const storeNames = new Set();
+  const failedProductsByStore = new Map();
+
+  for (const item of succeeded) storeNames.add(item.row.store_name);
+  for (const item of skipped) storeNames.add(item.storeName);
+  for (const item of failed) {
+    storeNames.add(item.storeName);
+    const products = failedProductsByStore.get(item.storeName) ?? [];
+    products.push(item);
+    failedProductsByStore.set(item.storeName, products);
+  }
+
+  return {
+    totalStores: storeNames.size,
+    failedStoreCount: failedProductsByStore.size,
+    successStoreCount: storeNames.size - failedProductsByStore.size,
+    failedProductsByStore,
+  };
+}
+
+function logStoreSummary(succeeded, skipped, failed) {
+  const {
+    totalStores,
+    successStoreCount,
+    failedStoreCount,
+    failedProductsByStore,
+  } = summarizeByStore(succeeded, skipped, failed);
+
+  console.log(
+    `=== STORE SUMMARY === success=${successStoreCount} failed=${failedStoreCount} total=${totalStores}`,
+  );
+
+  for (const [storeName, items] of failedProductsByStore.entries()) {
+    const products = items
+      .map((item) => `${item.name ?? item.id} (${item.stage}: ${item.error})`)
+      .join(", ");
+    console.error(`=== FAILED STORE [${storeName}] === ${products}`);
+  }
+}
+
+function logSkippedSources(skipped) {
+  if (skipped.length === 0) return;
+  console.warn("=== SKIPPED SOURCES (null prices) ===");
+  for (const item of skipped) {
+    console.warn(`[${item.id}] url=${item.url}`);
+    console.warn(
+      `  parsed: buy=${item.parsed.buy} sell=${item.parsed.sell} unit=${item.parsed.unit} updated="${item.parsed.lastUpdateText}"`,
+    );
+  }
+}
+
+function logSucceededSources(succeeded) {
+  if (succeeded.length === 0) return;
+  console.log(`=== OK (${succeeded.length}) ===`);
+  for (const item of succeeded) {
+    console.log(
+      `[${item.id}] buy=${item.row.buy_price} sell=${item.row.sell_price} unit=${item.row.unit} updated="${item.row.last_update_at}"`,
+    );
+  }
+}
+
+function checkSourceUrls(rows) {
+  const missingIds = rows
+    .filter((row) => !row.source_url || !row.source_url.trim())
+    .map((row) => `${row.id}:${row.unit}`);
+
+  if (missingIds.length > 0) {
+    console.error(`=== MISSING source_url: ${missingIds.join(", ")}`);
+  } else {
+    console.log(`=== source_url check passed (${rows.length}/${rows.length})`);
+  }
+
+  return {
+    totalRows: rows.length,
+    missingCount: missingIds.length,
+    missingIds,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
 
 export async function runScrapeJob(options = {}) {
   const sourceList = Array.isArray(options.sources) ? options.sources : SOURCES;
@@ -380,67 +603,27 @@ export async function runScrapeJob(options = {}) {
   const skipped = results.filter((r) => r.status === "skipped");
   const failed = results.filter((r) => r.status === "failed");
 
-  if (failed.length > 0) {
-    console.error("=== FAILED SOURCES ===");
-    for (const item of failed) {
-      console.error(`[${item.id}] stage=${item.stage} url=${item.url}`);
-      console.error(`  error: ${item.error}`);
-    }
-  }
-
-  if (skipped.length > 0) {
-    console.warn("=== SKIPPED SOURCES (null prices) ===");
-    for (const item of skipped) {
-      console.warn(`[${item.id}] url=${item.url}`);
-      console.warn(
-        `  parsed: buy=${item.parsed.buy} sell=${item.parsed.sell} unit=${item.parsed.unit} updated=\"${item.parsed.lastUpdateText}\"`,
-      );
-    }
-  }
-
-  if (succeeded.length > 0) {
-    console.log(`=== OK (${succeeded.length}) ===`);
-    for (const item of succeeded) {
-      console.log(
-        `[${item.id}] buy=${item.row.buy_price} sell=${item.row.sell_price} unit=${item.row.unit} updated="${item.row.last_update_at}"`,
-      );
-    }
-  }
+  logStoreSummary(succeeded, skipped, failed);
+  logSkippedSources(skipped);
+  logSucceededSources(succeeded);
 
   let dbError = null;
   const upsertedIds = [];
   const restSync = {
-    gold: { attempted: 0, patched: 0, failed: [] },
-    silver: { attempted: 0, patched: 0, failed: [] },
+    gold: emptyRestSyncResult(),
+    silver: emptyRestSyncResult(),
   };
   let sourceUrlCheck = {
     totalRows: 0,
     missingCount: 0,
     missingIds: [],
   };
+  let changeSummary = { changed: 0, unchanged: 0 };
 
   if (succeeded.length > 0 && persist) {
     const rows = succeeded.map((s) => s.row);
 
-    const missingSourceUrlIds = rows
-      .filter((row) => !row.source_url || !row.source_url.trim())
-      .map((row) => `${row.id}:${row.unit}`);
-
-    sourceUrlCheck = {
-      totalRows: rows.length,
-      missingCount: missingSourceUrlIds.length,
-      missingIds: missingSourceUrlIds,
-    };
-
-    if (missingSourceUrlIds.length > 0) {
-      console.error(
-        `=== MISSING source_url: ${missingSourceUrlIds.join(", ")}`,
-      );
-    } else {
-      console.log(
-        `=== source_url check passed (${rows.length}/${rows.length})`,
-      );
-    }
+    sourceUrlCheck = checkSourceUrls(rows);
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -455,6 +638,7 @@ export async function runScrapeJob(options = {}) {
       upsertedIds.push(...persisted.upsertedIds);
       restSync.gold = persisted.restSync.gold;
       restSync.silver = persisted.restSync.silver;
+      changeSummary = persisted.changeSummary;
       dbError = persisted.dbError;
     }
   }
@@ -462,6 +646,7 @@ export async function runScrapeJob(options = {}) {
   const summary = {
     ok: dbError === null,
     upserted: upsertedIds,
+    changeSummary,
     skipped: skipped.map((item) => ({
       id: item.id,
       url: item.url,
@@ -481,6 +666,10 @@ export async function runScrapeJob(options = {}) {
 
   const httpStatus =
     upsertedIds.length > 0 ? 200 : failed.length > 0 ? 207 : 422;
+
+  console.log(
+    `=== RUN SUMMARY === upserted=${upsertedIds.length} changed=${changeSummary.changed} unchanged=${changeSummary.unchanged} skipped=${skipped.length} failed=${failed.length}`,
+  );
 
   return { httpStatus, summary, results };
 }
