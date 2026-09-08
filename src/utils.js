@@ -2,7 +2,6 @@ export function parseSilverPriceToThousand(raw) {
   const cleaned = String(raw || "").replace(/[^\d.,]/g, "");
   if (!cleaned) return null;
 
-  const sepCount = (cleaned.match(/[.,]/g) ?? []).length;
   const digits = cleaned.replace(/[.,]/g, "");
   if (!digits) return null;
   if (digits.length > 12) return null;
@@ -11,9 +10,12 @@ export function parseSilverPriceToThousand(raw) {
   if (!Number.isFinite(n)) return null;
   if (n > 999_999_999_999) return null;
 
-  if (sepCount >= 2) return Math.round(n / 1000);
-  if (sepCount === 1) return n;
-
+  // Decide whether to scale down to "thousand VND" purely by magnitude,
+  // not by how many "." / "," separators are present. Some sources render
+  // grouped numbers with a missing separator (e.g. "54,399000" instead of
+  // "54,399,000" - a real formatting bug seen on vanghuongchi.com.vn's KG
+  // row), which previously fooled a separator-count check into skipping
+  // the /1000 scaling and produced a value 1000x too large.
   return n >= 1_000_000 ? Math.round(n / 1000) : n;
 }
 
