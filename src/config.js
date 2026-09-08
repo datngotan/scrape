@@ -12,7 +12,6 @@ import { MAO_THIET_SOURCES } from "./sources/gold/mao_thiet.js";
 import { LAM_NGOC_THANH_SOURCES } from "./sources/gold/lam_ngoc_thanh.js";
 import { KIM_TIN_SOURCES } from "./sources/gold/kim_tin.js";
 import { NGOC_MAI_SOURCES } from "./sources/gold/ngoc_mai.js";
-import { NGOC_CUA_NHA_BE_SOURCES } from "./sources/gold/ngoc_cua_nha_be.js";
 import { PHU_TAI_SOURCES } from "./sources/gold/phu_tai.js";
 import { PHUONG_NAM_GOLD_SOURCES } from "./sources/gold/phuong_nam_gold.js";
 import { VIET_A_GOLD_SOURCES } from "./sources/gold/viet_a_gold.js";
