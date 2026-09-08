@@ -23,7 +23,6 @@ import { ANH_MINH_GOLD_SOURCES } from "./sources/gold/anh_minh.js";
 import { SACOMBANK_SBJ_SOURCES } from "./sources/gold/sacombank_sbj.js";
 import { THANH_THANH_BINH_SOURCES } from "./sources/gold/thanh_thanh_binh.js";
 import { CHAT_VE_GOLD_SOURCES } from "./sources/gold/chat_ve.js";
-import { KIM_LONG_DONG_THAP_SOURCES } from "./sources/gold/kim_long_dong_thap.js";
 import { MY_HANH_SOURCES } from "./sources/gold/my_hanh.js";
 import { THANH_LIEN_SOURCES } from "./sources/gold/thanh_lien.js";
 import { PHUC_NHU_SOURCES } from "./sources/gold/phuc_nhu.js";
@@ -61,7 +60,6 @@ export const GOLD_SOURCES = [
   ...BTLV_SOURCES,
   ...HIEU_VANG_TRU_SOURCES,
   ...PHUC_THANH_SOURCES,
-  ...KIM_LONG_DONG_THAP_SOURCES,
   ...NGOC_VAN_KHOA_SOURCES,
   ...DOJI_SOURCES,
 ];
