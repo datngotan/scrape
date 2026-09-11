@@ -37,6 +37,7 @@ import { HAI_TUYEN_SOURCES } from "./sources/gold/hai_tuyen.js";
 import { BAO_TIN_BN_SOURCES } from "./sources/gold/bao_tin_bn.js";
 import { BTLV_SOURCES } from "./sources/gold/btlv.js";
 import { HIEU_VANG_TRU_SOURCES } from "./sources/gold/hieu_vang_tru.js";
+import { HIEU_VANG_VAN_SOURCES } from "./sources/gold/hieu_vang_van.js";
 import { PHUC_THANH_SOURCES } from "./sources/gold/phuc_thanh.js";
 import { DOJI_SOURCES } from "./sources/gold/doji.js";
 
@@ -58,6 +59,7 @@ export const GOLD_SOURCES = [
   ...BAO_TIN_BN_SOURCES,
   ...BTLV_SOURCES,
   ...HIEU_VANG_TRU_SOURCES,
+  ...HIEU_VANG_VAN_SOURCES,
   ...PHUC_THANH_SOURCES,
   ...NGOC_VAN_KHOA_SOURCES,
   ...DOJI_SOURCES,
