@@ -41,6 +41,7 @@ import { HIEU_VANG_VAN_SOURCES } from "./sources/gold/hieu_vang_van.js";
 import { PHUC_THANH_SOURCES } from "./sources/gold/phuc_thanh.js";
 import { DOJI_SOURCES } from "./sources/gold/doji.js";
 import { BAO_TIN_KK_SOURCES } from "./sources/gold/bao_tin_kk.js";
+import { HONG_PHUC_SOURCES } from "./sources/gold/hong_phuc.js";
 
 export const SILVER_SOURCES = [
   ...BAC_MAT_TRANG_SOURCES,
@@ -65,6 +66,7 @@ export const GOLD_SOURCES = [
   ...NGOC_VAN_KHOA_SOURCES,
   ...DOJI_SOURCES,
   ...BAO_TIN_KK_SOURCES,
+  ...HONG_PHUC_SOURCES,
 ];
 export const SILVER_TABLE = "silver_prices_9999";
 export const GOLD_TABLE = "gold_prices_999";
