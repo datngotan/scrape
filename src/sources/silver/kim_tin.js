@@ -2,46 +2,36 @@ import * as cheerio from "cheerio";
 
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
-export const KIM_TIN_GOLD_PRODUCTS = [
+export const KIM_TIN_SILVER_PRODUCTS = [
   {
-    id: "kim_tin",
-    name: "Kim Tín (Nhẫn tròn trơn 999.9)",
-    label: "NHAN TRON TRON",
+    id: "kim_tin_bac_thoi_9999_1_luong",
+    name: "Kim Tín (Bạc miếng, Bạc thỏi 999.9)",
+    needle: "1 LUONG",
     purity: "999.9",
+    unit: "luong",
   },
   {
-    id: "kim_tin_nhan_tron_ep_vi",
-    name: "Kim Tín (Nhẫn tròn ép vỉ 999.9)",
-    label: "NHAN TRON EP VI",
+    id: "kim_tin_bac_thoi_9999_1_kg",
+    name: "Kim Tín (Bạc miếng, Bạc thỏi 999.9)",
+    needle: "1 KILO",
     purity: "999.9",
+    unit: "kg",
   },
   {
-    id: "kim_tin_qua_mung_vang",
-    name: "Kim Tín (Quà mừng vàng 999.9)",
-    label: "QUA MUNG VANG",
-    purity: "999.9",
-  },
-  {
-    id: "kim_tin_trang_suc_9999",
-    name: "Kim Tín (Trang sức 999.9)",
-    label: "TRANG SUC",
-    purity: "999.9",
-  },
-  {
-    id: "kim_tin_trang_suc_999",
-    name: "Kim Tín (Trang sức 99.9)",
-    label: "TRANG SUC",
+    id: "kim_tin_bac_thoi_999_1_luong",
+    name: "Kim Tín (Bạc miếng, Bạc thỏi 99.9)",
+    needle: "1 LUONG",
     purity: "99.9",
+    unit: "luong",
   },
   {
-    id: "kim_tin_trang_suc_997",
-    name: "Kim Tín (Trang sức 99.7)",
-    label: "TRANG SUC",
-    purity: "99.7",
+    id: "kim_tin_bac_thoi_999_1_kg",
+    name: "Kim Tín (Bạc miếng, Bạc thỏi 99.9)",
+    needle: "1 KILO",
+    purity: "99.9",
+    unit: "kg",
   },
 ];
-
-export const KIM_TIN_PRODUCTS = KIM_TIN_GOLD_PRODUCTS;
 
 const KIM_TIN_FETCH_OPTIONS = {
   timeoutMs: 120_000,
@@ -134,7 +124,6 @@ function parseBuySellFromMarkdown(payload, label, purity) {
       return direct;
     }
 
-    // Handle cases where one logical table row is wrapped across lines.
     const combined = [line, lines[i + 1] ?? "", lines[i + 2] ?? ""]
       .filter((part) => part.includes("|"))
       .join(" ");
@@ -147,22 +136,25 @@ function parseBuySellFromMarkdown(payload, label, purity) {
   return { buy: null, sell: null };
 }
 
-export function parseGoldBuySell(payload, label, purity) {
+export function parseSilverBuySell(payload, needle, purity) {
   const html = String(payload || "");
-  const targetLabel = normalizeLabelText(label);
+  const targetNeedle = normalizeLabelText(needle);
 
-  // 1. Cheerio HTML parsing (Table 0: Hà Nội panel)
+  // 1. Cheerio HTML parsing (Table 2: Silver table on kimtin.com.vn)
   try {
     const $ = cheerio.load(html);
-    const hanoiTable = $(".gold-area-panel-HN table").length
-      ? $(".gold-area-panel-HN table")
-      : $(".gold-area-panel.active table").length
-      ? $(".gold-area-panel.active table")
-      : $("table").first();
+    const silverTable = $("table").filter((_, t) => {
+      const text = $(t).text();
+      return (
+        text.includes("Bạc rồng Kim Tín") ||
+        text.includes("Bạc miếng") ||
+        text.includes("Bạc tinh khiết")
+      );
+    });
 
-    if (hanoiTable.length) {
+    if (silverTable.length) {
       let result = null;
-      hanoiTable.find("tr").each((_, tr) => {
+      silverTable.find("tr").each((_, tr) => {
         if (result) return;
         const tds = $(tr).find("td");
         if (tds.length < 3) return;
@@ -172,7 +164,7 @@ export function parseGoldBuySell(payload, label, purity) {
           .get();
         const rowFullText = normalizeLabelText(cellTexts.join(" "));
 
-        if (!rowFullText.includes(targetLabel)) return;
+        if (!rowFullText.includes(targetNeedle)) return;
 
         const purityCell = cellTexts[cellTexts.length - 3] || "";
         if (!matchesPurityCell(purityCell, purity)) return;
@@ -191,7 +183,7 @@ export function parseGoldBuySell(payload, label, purity) {
   }
 
   // 2. Markdown table parsing fallback
-  const markdown = parseBuySellFromMarkdown(html, label, purity);
+  const markdown = parseBuySellFromMarkdown(html, needle, purity);
   if (markdown.buy != null && markdown.sell != null) {
     return markdown;
   }
@@ -200,7 +192,7 @@ export function parseGoldBuySell(payload, label, purity) {
   const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
   for (const row of rows) {
     const rowText = stripHtmlToText(row);
-    if (!normalizeLabelText(rowText).includes(targetLabel)) continue;
+    if (!normalizeLabelText(rowText).includes(targetNeedle)) continue;
 
     const cells = row.match(/<td[\s\S]*?<\/td>/gi) ?? [];
     if (cells.length >= 3 && purity) {
@@ -208,11 +200,7 @@ export function parseGoldBuySell(payload, label, purity) {
       if (!matchesPurityCell(purityCell, purity)) continue;
     }
 
-    const content =
-      cells.length >= 5
-        ? `${stripHtmlToText(cells[3])} ${stripHtmlToText(cells[4])}`
-        : rowText;
-    const nums = numbersFromText(content);
+    const nums = numbersFromText(rowText);
     if (nums.length < 2) continue;
 
     return {
@@ -222,11 +210,6 @@ export function parseGoldBuySell(payload, label, purity) {
   }
 
   return { buy: null, sell: null };
-}
-
-// Backwards-compatible parser function
-export function parseBuySellByLabel(payload, label, purity) {
-  return parseGoldBuySell(payload, label, purity);
 }
 
 function timeCandidatesFromRegex(text) {
@@ -291,18 +274,22 @@ export function parseTime(payload) {
   return nowVnText();
 }
 
-export const KIM_TIN_SOURCES = KIM_TIN_GOLD_PRODUCTS.map((product) => ({
+export const KIM_TIN_SILVER_SOURCES = KIM_TIN_SILVER_PRODUCTS.map((product) => ({
   ...KIM_TIN_SHARED,
   id: product.id,
   name: product.name,
-  unit: "luong",
+  unit: product.unit,
   parse: (payload) => {
-    const { buy, sell } = parseGoldBuySell(payload, product.label, product.purity);
+    const { buy, sell } = parseSilverBuySell(
+      payload,
+      product.needle,
+      product.purity,
+    );
     return {
       buy,
       sell,
+      unit: product.unit,
       lastUpdateText: parseTime(payload),
     };
   },
 }));
-
