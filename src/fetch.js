@@ -112,8 +112,10 @@ export async function fetchHtml(url, options = {}) {
           await gotoWithFallback(page, url, timeoutMs, waitUntil);
 
           // Prefer waiting for the price table; continue with timeout fallback.
+          const selectorToWait =
+            options.waitForSelector || "#top-table-chart table tbody tr";
           try {
-            await page.waitForSelector("#top-table-chart table tbody tr", {
+            await page.waitForSelector(selectorToWait, {
               timeout: 10_000,
             });
           } catch {
