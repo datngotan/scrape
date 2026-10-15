@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { nowVnText, stripHtmlToText } from "../../utils.js";
 
 export const PAGE_URL = "https://tinthanhduymong.vn";
+export const API_URL = "https://tinthanhduymong.vn/api/v2/gold-prices/latest";
 
 export const TIN_THANH_DUY_MONG_PRODUCTS = [
   {
@@ -49,7 +50,10 @@ function normalizeText(input) {
 }
 
 function parsePriceToken(raw) {
-  const digits = String(raw || "").replace(/[^\d]/g, "");
+  // Drop decimal part (API returns e.g. "13300000.00").
+  const digits = String(raw ?? "")
+    .replace(/[.,]\d{1,2}$/, "")
+    .replace(/[^\d]/g, "");
   if (!digits) return null;
 
   let n = Number(digits);
@@ -149,8 +153,9 @@ function parseBuySellFromJson(payload, product) {
 
   if (!item) return { buy: null, sell: null };
 
-  const buy = parsePriceToken(item.buy_price ?? item.buy);
-  const sell = parsePriceToken(item.sell_price ?? item.sell);
+  const priceObj = item.price ?? item;
+  const buy = parsePriceToken(priceObj.buy_price ?? priceObj.buy);
+  const sell = parsePriceToken(priceObj.sell_price ?? priceObj.sell);
 
   return sanitizeBuySell(buy, sell);
 }
@@ -220,13 +225,9 @@ export const TIN_THANH_DUY_MONG_SOURCES = TIN_THANH_DUY_MONG_PRODUCTS.map(
     name: product.name,
     storeName: "Tín Thành Duy Mong",
     unit: "chi",
-    url: PAGE_URL,
+    url: API_URL,
     webUrl: PAGE_URL,
     location: "Huế",
-    fetchOptions: {
-      waitForSelector: "table tbody tr",
-      waitMs: 1500,
-    },
     parse: (payload) => {
       const { buy, sell } = parseBuySell(payload, product);
       return {
